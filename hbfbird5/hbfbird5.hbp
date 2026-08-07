@@ -24,5 +24,8 @@
 
 ${hb_name}.hbx
 
+
+xhb.hbc
 firebird5.c
 Fb5class.prg
+FB5RDD.prg
