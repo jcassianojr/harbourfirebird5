@@ -1,0 +1,8 @@
+*.c
+*.ch
+*.exe
+*.log
+*.o
+*.reso
+*.dll
+*.a
