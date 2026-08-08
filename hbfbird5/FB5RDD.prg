@@ -586,6 +586,92 @@ STATIC FUNCTION FB5_INFO( nWA, nIndex, cargo )
    ENDCASE
 RETURN xRet   
 
+
+STATIC FUNCTION FB5_CREATE( nWA, aOpenInfo )
+   LOCAL aWAData := USRRDD_AREADATA( nWA )
+   LOCAL db, dialect, oError, cSql, n, nRes
+   LOCAL cTableName := AllTrim( aOpenInfo[ UR_OI_NAME ] )
+   LOCAL aStruct    := aWAData[ AREA_STRUCT ] 
+   LOCAL mFldNm, mFldType, mFldLen, mFldDec
+
+   IF !Empty( aOpenInfo[ UR_OI_CONNECT ] ) .AND. aOpenInfo[ UR_OI_CONNECT ] <= Len( s_aConnections )
+      db      := s_aConnections[ aOpenInfo[ UR_OI_CONNECT ] ][ 1 ]
+      dialect := s_aConnections[ aOpenInfo[ UR_OI_CONNECT ] ][ 2 ]
+   ELSEIF Len( s_aConnections ) > 0
+      db      := s_aConnections[ Len( s_aConnections ) ][ 1 ]
+      dialect := s_aConnections[ Len( s_aConnections ) ][ 2 ]
+   ENDIF
+
+   IF Empty( db )
+      oError := ErrorNew()
+      oError:GenCode     := EG_CREATE
+      oError:Description := hb_langErrMsg( EG_CREATE ) + ", Nenhuma conexao Firebird ativa para dbCreate()."
+      oError:FileName    := cTableName
+      UR_SUPER_ERROR( nWA, oError )
+      RETURN FAILURE
+   ENDIF
+
+   // Firebird não utiliza "IF NOT EXISTS", portanto usa-se a sintaxe tradicional estrita[cite: 9]
+   cSql := "CREATE TABLE " + cTableName + " ("
+
+   FOR n := 1 TO Len( aStruct )
+      mFldNm   := aStruct[ n, UR_FI_NAME ]
+      mFldType := aStruct[ n, UR_FI_TYPE ] 
+      mFldLen  := aStruct[ n, UR_FI_LEN ]
+      mFldDec  := aStruct[ n, UR_FI_DEC ]
+
+      IF n > 1
+         cSql += ", "
+      ENDIF
+
+      cSql += AllTrim( mFldNm ) + " "
+
+      // Mapeamento de tipos baseado no seu create.prg para FIREBIRD[cite: 9]
+      DO CASE
+         CASE mFldType == "+" .OR. mFldNm == "SR_RECNO"
+            cSql += "INTEGER GENERATED ALWAYS AS IDENTITY UNIQUE"
+         CASE mFldType == HB_FT_STRING .OR. mFldType == "C"
+            cSql += "VARCHAR(" + LTrim( Str( mFldLen ) ) + ")"
+         CASE mFldType == HB_FT_DATE .OR. mFldType == "D"
+            cSql += "TIMESTAMP"
+         CASE mFldType == HB_FT_LONG .OR. mFldType == HB_FT_INTEGER .OR. mFldType == "N"
+            IF mFldDec > 0
+               cSql += "DECIMAL(" + LTrim( Str( mFldLen ) ) + "," + LTrim( Str( mFldDec ) ) + ")"
+            ELSE
+               IF mFldLen <= 4
+                  cSql += "SMALLINT"
+               ELSEIF mFldLen <= 9
+                  cSql += "INTEGER"
+               ELSE
+                  cSql += "BIGINT"
+               ENDIF
+            ENDIF
+         CASE mFldType == HB_FT_LOGICAL .OR. mFldType == "L"
+            cSql += "SMALLINT DEFAULT 0 NOT NULL"
+         CASE mFldType == HB_FT_MEMO .OR. mFldType == "M"
+            cSql += "BLOB SUB_TYPE TEXT"
+         CASE mFldType == HB_FT_BLOB .OR. mFldType == "G"
+            cSql += "BLOB SUB_TYPE 0"
+         OTHERWISE
+            cSql += "VARCHAR(255)"
+      ENDCASE
+   NEXT
+
+   cSql += ")"
+
+   // Executa a criação no Firebird usando a API C
+   nRes := FBExecute( db, cSql, dialect )
+
+   IF nRes < 0
+      oError := ErrorNew()
+      oError:GenCode     := EG_CREATE
+      oError:Description := "Erro ao criar tabela Firebird: " + hb_ntos( nRes )
+      UR_SUPER_ERROR( nWA, oError )
+      RETURN FAILURE
+   ENDIF
+
+   RETURN SUCCESS
+
 // +--------------------------------------------------------------------
 // +    Tabela de Roteamento de Metodos 
 // +--------------------------------------------------------------------
@@ -615,6 +701,7 @@ FUNCTION FB5RDD_GETFUNCTABLE( pFuncCount, pFuncTable, pSuperTable, nRddID )
    aMyFunc[ UR_DELETE ]   := ( @FB5_DELETE() )
    aMyFunc[ UR_RDDINFO ]  := ( @FB5_RDDINFO() )
    aMyFunc[ UR_INFO ]     := ( @FB5_INFO() )
+   aMyFunc[ UR_CREATE ] := ( @FB5_CREATE() )
 
    RETURN USRRDD_GETFUNCTABLE( pFuncCount, pFuncTable, pSuperTable, nRddID, cSuperRDD, aMyFunc )
 
