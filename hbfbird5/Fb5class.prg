@@ -1,26 +1,32 @@
 /*
  * Firebird RDBMS low-level (client API) interface code for Firebird 5.
- * Adapted for Harbour Project (Fb5class)
+ * Adapted for Harbour Project (Fb5class - Versão Final Otimizada)
  */
 
 #include "hbclass.ch"
 
-#define SQL_TEXT            452
-#define SQL_VARYING         448
-#define SQL_SHORT           500
-#define SQL_LONG            496
-#define SQL_FLOAT           482
-#define SQL_DOUBLE          480
-#define SQL_D_FLOAT         530
-#define SQL_TIMESTAMP       510
-#define SQL_BLOB            520
-#define SQL_ARRAY           540
-#define SQL_QUAD            550
-#define SQL_TYPE_TIME       560
-#define SQL_TYPE_DATE       570
-#define SQL_INT64           580
-#define SQL_BOOLEAN         527  /* Suporte ao tipo booleano nativo do Firebird 5 */
-#define SQL_DATE            SQL_TIMESTAMP
+/* Macros oficiais do Firebird 5 / InterBase para tipos SQL e Dialetos */
+#define IB_SQL_TEXT                           452
+#define IB_SQL_VARYING                        448
+#define IB_SQL_SHORT                          500
+#define IB_SQL_LONG                           496
+#define IB_SQL_FLOAT                          482
+#define IB_SQL_DOUBLE                         480
+#define IB_SQL_D_FLOAT                        530
+#define IB_SQL_TIMESTAMP                      510
+#define IB_SQL_BLOB                           520
+#define IB_SQL_ARRAY                          540
+#define IB_SQL_QUAD                           550
+#define IB_SQL_TYPE_TIME                      560
+#define IB_SQL_TYPE_DATE                      570
+#define IB_SQL_INT64                          580
+#define IB_SQL_DATE                           IB_SQL_TIMESTAMP
+#define IB_SQL_BOOLEAN                        32764
+
+#define IB_DIALECT_V5                         1
+#define IB_DIALECT_V6_TRANSITION              2
+#define IB_DIALECT_V6                         3
+#define IB_DIALECT_CURRENT                    IB_DIALECT_V6
 
 CREATE CLASS Fb5class
 
@@ -30,8 +36,9 @@ CREATE CLASS Fb5class
    VAR nError
    VAR lError
    VAR dialect
+   VAR charset
 
-   METHOD New( cServer, cUser, cPassword, nDialect )
+   METHOD New( cServer, cUser, cPassword, nDialect, cCharSet )
    METHOD Destroy()  INLINE FBClose( ::db )
    METHOD Close()    INLINE FBClose( ::db )
 
@@ -56,16 +63,18 @@ CREATE CLASS Fb5class
 
 ENDCLASS
 
-METHOD New( cServer, cUser, cPassword, nDialect ) CLASS Fb5class
+METHOD New( cServer, cUser, cPassword, nDialect, cCharSet ) CLASS Fb5class
 
-   hb_default( @nDialect, 1 )
+   hb_default( @nDialect, IB_DIALECT_CURRENT )
+   hb_default( @cCharSet, "UTF8" )
 
    ::lError := .F.
    ::nError := 0
    ::StartedTrans := .F.
    ::Dialect := nDialect
+   ::charset := cCharSet
 
-   ::db := FBConnect( cServer, cUser, cPassword )
+   ::db := FBConnect( cServer, cUser, cPassword, ::charset )
 
    IF HB_ISNUMERIC( ::db )
       ::lError := .T.
@@ -164,14 +173,12 @@ METHOD TableExists( cTable ) CLASS Fb5class
    LOCAL result := .F.
    LOCAL qry
 
-   //cQuery := 'select rdb$relation_name from rdb$relations where rdb$relation_name = "' + Upper( cTable ) + '"'
    cQuery := "select rdb$relation_name from rdb$relations where rdb$relation_name = '" + Upper( AllTrim( cTable ) ) + "'"
 
    qry := FBQuery( ::db, cQuery, ::dialect )
 
    IF HB_ISARRAY( qry )
       result := ( FBFetch( qry ) == 0 )
-
       FBFree( qry )
    ENDIF
 
@@ -183,18 +190,11 @@ METHOD ListTables() CLASS Fb5class
    LOCAL cQuery
    LOCAL qry
 
-   //cQuery := 'select rdb$relation_name '
-   //cQuery += '  from rdb$relations '
-   //cQuery += ' where rdb$relation_name not like "RDB$%" '
-   //cQuery += '   and rdb$view_blr is null '
-   //cQuery += ' order by 1 '
-   
-   
    cQuery := "select rdb$relation_name "
-cQuery += "  from rdb$relations "
-cQuery += " where rdb$relation_name not like 'RDB$%' "
-cQuery += "   and rdb$view_blr is null "
-cQuery += " order by 1 "
+   cQuery += "  from rdb$relations "
+   cQuery += " where rdb$relation_name not like 'RDB$%' "
+   cQuery += "   and rdb$view_blr is null "
+   cQuery += " order by 1 "
 
    qry := FBQuery( ::db, RemoveSpaces( cQuery ), ::dialect )
 
@@ -202,7 +202,6 @@ cQuery += " order by 1 "
       DO WHILE FBFetch( qry ) == 0
          AAdd( result, FBGetData( qry, 1 ) )
       ENDDO
-
       FBFree( qry )
    ENDIF
 
@@ -214,125 +213,69 @@ METHOD TableStruct( cTable ) CLASS Fb5class
    LOCAL cQuery, cType, nSize, cDomain, cField, nType, nDec
    LOCAL qry
 
-   /*
-   cQuery := 'select '
-   cQuery += '  a.rdb$field_name,'
-   cQuery += '  b.rdb$field_type,'
-   cQuery += '  b.rdb$field_length,'
-   cQuery += '  b.rdb$field_scale * -1,'
-   cQuery += '  a.rdb$field_source '
-   cQuery += 'from '
-   cQuery += '  rdb$relation_fields a, rdb$fields b '
-   cQuery += 'where '
-   cQuery += '  a.rdb$field_source = b.rdb$field_name '
-   cQuery += '  and a.rdb$relation_name = "' + Upper( ctable ) + '" '
-   cQuery += 'order by '
-   cQuery += '  a.rdb$field_position '
-*/
-
-cQuery := "select "
-cQuery += "  a.rdb$field_name,"
-cQuery += "  b.rdb$field_type,"
-cQuery += "  b.rdb$field_length,"
-cQuery += "  b.rdb$field_scale * -1,"
-cQuery += "  a.rdb$field_source "
-cQuery += "from "
-cQuery += "  rdb$relation_fields a, rdb$fields b "
-cQuery += "where "
-cQuery += "  a.rdb$field_source = b.rdb$field_name "
-cQuery += "  and a.rdb$relation_name = '" + Upper( AllTrim( ctable ) ) + "' "
-cQuery += "order by "
-cQuery += "  a.rdb$field_position "
+   cQuery := "select "
+   cQuery += "  a.rdb$field_name,"
+   cQuery += "  b.rdb$field_type,"
+   cQuery += "  b.rdb$field_length,"
+   cQuery += "  b.rdb$field_scale * -1,"
+   cQuery += "  a.rdb$field_source "
+   cQuery += "from "
+   cQuery += "  rdb$relation_fields a, rdb$fields b "
+   cQuery += "where "
+   cQuery += "  a.rdb$field_source = b.rdb$field_name "
+   cQuery += "  and a.rdb$relation_name = '" + Upper( AllTrim( ctable ) ) + "' "
+   cQuery += "order by "
+   cQuery += "  a.rdb$field_position "
 
    qry := FBQuery( ::db, RemoveSpaces( cQuery ), ::dialect )
 
    IF HB_ISARRAY( qry )
       DO WHILE FBFetch( qry ) == 0
-         cField  := FBGetData( qry, 1 )
-         nType   := Val( FBGetData( qry, 2 ) )
-         nSize   := Val( FBGetData( qry, 3 ) )
-         nDec    := Val( FBGetData( qry, 4 ) )
-         cDomain := FBGetData( qry, 5 )
+         cField  := iif( FBGetData( qry, 1 ) == NIL, "", FBGetData( qry, 1 ) )
+         nType   := Val( iif( FBGetData( qry, 2 ) == NIL, "0", FBGetData( qry, 2 ) ) )
+         nSize   := Val( iif( FBGetData( qry, 3 ) == NIL, "0", FBGetData( qry, 3 ) ) )
+         nDec    := Val( iif( FBGetData( qry, 4 ) == NIL, "0", FBGetData( qry, 4 ) ) )
+         cDomain := iif( FBGetData( qry, 5 ) == NIL, "", FBGetData( qry, 5 ) )
 
          SWITCH nType
-         CASE SQL_BOOLEAN
-            cType := "L"
-            nSize := 1
-            nDec := 0
-            EXIT
-
+         CASE IB_SQL_BOOLEAN
+            cType := "L"; nSize := 1; nDec := 0; EXIT
          CASE 7 // SMALLINT
             IF "BOOL" $ cDomain
-               cType := "L"
-               nSize := 1
-               nDec := 0
+               cType := "L"; nSize := 1; nDec := 0
             ELSE
-               cType := "N"
-               nSize := 5
+               cType := "N"; nSize := 5
             ENDIF
-
             EXIT
-
          CASE 8 // INTEGER
          CASE 9
-            cType := "N"
-            nSize := 9
-            EXIT
-
+            cType := "N"; nSize := 9; EXIT
          CASE 10 // FLOAT
          CASE 11
-            cType := "N"
-            nSize := 15
-            EXIT
-
+            cType := "N"; nSize := 15; EXIT
          CASE 12 // DATE
-            cType := "D"
-            nSize := 8
-            EXIT
-
+            cType := "D"; nSize := 8; EXIT
          CASE 13 // TIME
-            cType := "C"
-            nSize := 10
-            EXIT
-
+            cType := "C"; nSize := 10; EXIT
          CASE 14 // CHAR
-            cType := "C"
-            EXIT
-
+            cType := "C"; EXIT
          CASE 16 // INT64
-            cType := "N"
-            nSize := 9
-            EXIT
-
+            cType := "N"; nSize := 9; EXIT
          CASE 27 // DOUBLE
-            cType := "N"
-            nSize := 15
-            EXIT
-
+            cType := "N"; nSize := 15; EXIT
          CASE 35 // TIMESTAMP
-            cType := "D"
-            nSize := 8
-            EXIT
-
+            cType := "D"; nSize := 8; EXIT
          CASE 37 // VARCHAR
          CASE 40
-            cType := "C"
-            EXIT
-
+            cType := "C"; EXIT
          CASE 261 // BLOB
-            cType := "M"
-            nSize := 10
-            EXIT
-
+            cType := "M"; nSize := 10; EXIT
          OTHERWISE
-            cType := "C"
-            nDec := 0
+            cType := "C"; nDec := 0
          ENDSWITCH
 
          AAdd( result, { cField, cType, nSize, nDec } )
-
       ENDDO
-
       FBFree( qry )
    ENDIF
 
@@ -373,7 +316,7 @@ METHOD Delete( oRow, cWhere ) CLASS Fb5class
 METHOD Append( oRow ) CLASS Fb5class
 
    LOCAL result := .F.
-   LOCAL cQuery, i, aTables
+   LOCAL cQuery, i, aTables, aKeys, qryIns, nPosPK
 
    aTables := oRow:GetTables()
 
@@ -394,7 +337,24 @@ METHOD Append( oRow ) CLASS Fb5class
       NEXT
 
       cQuery := Left( cQuery, Len( cQuery ) - 1  ) + ")"
-      result := ::Execute( cQuery )
+
+      aKeys := oRow:GetKeyField()
+      IF Len( aKeys ) == 1
+         cQuery += " RETURNING " + aKeys[ 1 ]
+         qryIns := FBQuery( ::db, cQuery, ::dialect )
+         IF HB_ISARRAY( qryIns )
+            IF FBFetch( qryIns ) == 0
+               nPosPK := oRow:FieldPos( aKeys[ 1 ] )
+               IF nPosPK > 0
+                  oRow:FieldPut( nPosPK, Val( FBGetData( qryIns, 1 ) ) )
+               ENDIF
+            ENDIF
+            FBFree( qryIns )
+            result := .T.
+         ENDIF
+      ELSE
+         result := ::Execute( cQuery )
+      ENDIF
    ENDIF
 
    RETURN result
@@ -783,7 +743,7 @@ METHOD Changed( nField ) CLASS TFBRow
 
    LOCAL result
 
-   IF nField >= 1 .AND. nField <= Len( ::aRow )
+   IF nField >= 1 .AND. Len( ::aChanged ) >= nField .AND. ::aChanged != NIL
       result := ( ::aChanged[ nField ] != NIL )
    ENDIF
 
@@ -870,35 +830,18 @@ STATIC FUNCTION KeyField( aTables, db, dialect )
    IF Len( aTables ) == 1
       cTable := aTables[ 1 ]
 
-      
-      /*
-      cQuery := ' select                                      '
-      cQuery += '   a.rdb$field_name                          '
-      cQuery += ' from                                        '
-      cQuery += '   rdb$index_segments a,                     '
-      cQuery += '   rdb$relation_constraints b                '
-      cQuery += ' where                                       '
-      cQuery += '   a.rdb$index_name = b.rdb$index_name and   '
-      cQuery += '   b.rdb$constraint_type = "PRIMARY KEY" and '
-      cQuery += '   b.rdb$relation_name = ' + DataToSql( cTable )
-      cQuery += ' order by                                    '
-      cQuery += '   b.rdb$relation_name,                      '
-      cQuery += '   a.rdb$field_position                      '
-      */
-      
-   cQuery := " select "
-    cQuery += "   a.rdb$field_name "
-    cQuery += " from "
-    cQuery += "   rdb$index_segments a, "
-    cQuery += "   rdb$relation_constraints b "
-    cQuery += " where "
-    cQuery += "   a.rdb$index_name = b.rdb$index_name and "
-    cQuery += "   b.rdb$constraint_type = 'PRIMARY KEY' and "
-    cQuery += "   b.rdb$relation_name = " + DataToSql( cTable )
-    cQuery += " order by "
-    cQuery += "   b.rdb$relation_name, "
-    cQuery += "   a.rdb$field_position "
-      
+      cQuery := " select "
+      cQuery += "   a.rdb$field_name "
+      cQuery += " from "
+      cQuery += "   rdb$index_segments a, "
+      cQuery += "   rdb$relation_constraints b "
+      cQuery += " where "
+      cQuery += "   a.rdb$index_name = b.rdb$index_name and "
+      cQuery += "   b.rdb$constraint_type = 'PRIMARY KEY' and "
+      cQuery += "   b.rdb$relation_name = " + DataToSql( cTable )
+      cQuery += " order by "
+      cQuery += "   b.rdb$relation_name, "
+      cQuery += "   a.rdb$field_position "
 
       qry := FBQuery( db, RemoveSpaces( cQuery ), dialect )
 
@@ -906,7 +849,6 @@ STATIC FUNCTION KeyField( aTables, db, dialect )
          DO WHILE FBFetch( qry ) == 0
             AAdd( aKeys, RTrim( FBGetData( qry, 1 ) ) )
          ENDDO
-
          FBFree( qry )
       ENDIF
    ENDIF
@@ -917,16 +859,18 @@ STATIC FUNCTION DataToSql( xField )
 
    SWITCH ValType( xField )
    CASE "C"
-      RETURN '"' + StrTran( xField, '"', ' ' ) + '"'
+   CASE "M"
+      RETURN "'" + StrTran( xField, "'", "''" ) + "'"
    CASE "D"
-      RETURN '"' + StrZero( Month( xField ), 2 ) + "/" + StrZero( Day( xField ), 2 ) + "/" + StrZero( Year( xField ), 4 ) + '"'
+      IF Empty( xField ); RETURN "NULL"; ENDIF
+      RETURN "'" + StrZero( Year( xField ), 4 ) + "-" + StrZero( Month( xField ), 2 ) + "-" + StrZero( Day( xField ), 2 ) + "'"
    CASE "N"
       RETURN Str( xField )
    CASE "L"
-      RETURN iif( xField, "1", "0" )
+      RETURN iif( xField, "TRUE", "FALSE" )
    ENDSWITCH
 
-   RETURN NIL
+   RETURN "NULL"
 
 STATIC FUNCTION StructConvert( aStru, db, dialect )
 
@@ -956,20 +900,12 @@ STATIC FUNCTION StructConvert( aStru, db, dialect )
          xfields += ","
       ENDIF
    NEXT
-
-   /*
-   cQuery := 'select rdb$relation_name, rdb$field_name, rdb$field_source '
-   cQuery += '  from rdb$relation_fields '
-   cQuery += ' where rdb$field_name not like "RDB$%" '
-   cQuery += '   and rdb$relation_name in (' + xtables + ')'
-   cQuery += '   and rdb$field_name in (' + xfields + ')'
-  */
   
-  cQuery := "select rdb$relation_name, rdb$field_name, rdb$field_source "
- cQuery += "  from rdb$relation_fields "
- cQuery += " where rdb$field_name not like 'RDB$%' "
- cQuery += "   and rdb$relation_name in (" + xtables + ")"
- cQuery += "   and rdb$field_name in (" + xfields + ")"
+   cQuery := "select rdb$relation_name, rdb$field_name, rdb$field_source "
+   cQuery += "  from rdb$relation_fields "
+   cQuery += " where rdb$field_name not like 'RDB$%' "
+   cQuery += "   and rdb$relation_name in (" + xtables + ")"
+   cQuery += "   and rdb$field_name in (" + xfields + ")"
 
    qry := FBQuery( db, RemoveSpaces( cQuery ), dialect )
 
@@ -1000,63 +936,43 @@ STATIC FUNCTION StructConvert( aStru, db, dialect )
          ENDIF
 
          SWITCH nType
-         CASE SQL_BOOLEAN
-            cType := "L"
-            nSize := 1
-            nDec := 0
-            EXIT
+         CASE IB_SQL_BOOLEAN
+            cType := "L"; nSize := 1; nDec := 0; EXIT
 
-         CASE SQL_TEXT
-         CASE SQL_VARYING
-            cType := "C"
-            EXIT
+         CASE IB_SQL_TEXT
+         CASE IB_SQL_VARYING
+            cType := "C"; EXIT
 
-         CASE SQL_SHORT
+         CASE IB_SQL_SHORT
             IF "BOOL" $ cDomain
-               cType := "L"
-               nSize := 1
-               nDec := 0
+               cType := "L"; nSize := 1; nDec := 0
             ELSE
-               cType := "N"
-               nSize := 5
+               cType := "N"; nSize := 5
             ENDIF
             EXIT
 
-         CASE SQL_LONG
-         CASE SQL_INT64
-            cType := "N"
-            nSize := 9
-            EXIT
+         CASE IB_SQL_LONG
+         CASE IB_SQL_INT64
+            cType := "N"; nSize := 9; EXIT
 
-         CASE SQL_FLOAT
-         CASE SQL_DOUBLE
-            cType := "N"
-            nSize := 15
-            EXIT
+         CASE IB_SQL_FLOAT
+         CASE IB_SQL_DOUBLE
+            cType := "N"; nSize := 15; EXIT
 
-         CASE SQL_TIMESTAMP
-            cType := "T"
-            nSize := 8
-            EXIT
+         CASE IB_SQL_TIMESTAMP
+            cType := "T"; nSize := 8; EXIT
 
-         CASE SQL_TYPE_DATE
-            cType := "D"
-            nSize := 8
-            EXIT
+         CASE IB_SQL_TYPE_DATE
+            cType := "D"; nSize := 8; EXIT
 
-         CASE SQL_TYPE_TIME
-            cType := "C"
-            nSize := 8
-            EXIT
+         CASE IB_SQL_TYPE_TIME
+            cType := "C"; nSize := 8; EXIT
 
-         CASE SQL_BLOB
-            cType := "M"
-            nSize := 10
-            EXIT
+         CASE IB_SQL_BLOB
+            cType := "M"; nSize := 10; EXIT
 
          OTHERWISE
-            cType := "C"
-            nDec := 0
+            cType := "C"; nDec := 0
          ENDSWITCH
 
          AAdd( aNew, { cField, cType, nSize, nDec, cTable, cDomain } )
