@@ -1,0 +1,55 @@
+/* --------------------------------------------------------------------
+ * NOTE: You can add manual override which functions to include or
+ *       exclude from automatically generated EXTERNAL/DYNAMIC list.
+ *          Syntax: // HB_FUNC_INCLUDE <func>
+ *                  // HB_FUNC_EXCLUDE <func>
+ */
+
+/* --------------------------------------------------------------------
+ * WARNING: Automatically generated code below. DO NOT EDIT! (except casing)
+ *          Regenerate using hbmk2 '-hbx=' option.
+ */
+
+#ifndef __HBEXTERN_CH__HBFIRD5__
+#define __HBEXTERN_CH__HBFIRD5__
+
+#if defined( __HBEXTREQ__ ) .OR. defined( __HBEXTERN__HBFIRD5__ANNOUNCE )
+   ANNOUNCE __HBEXTERN__HBFIRD5__
+#endif
+
+#if defined( __HBEXTREQ__ ) .OR. defined( __HBEXTERN__HBFIRD5__REQUEST )
+   #command DYNAMIC <fncs,...> => EXTERNAL <fncs>
+#endif
+
+DYNAMIC DBFB5CLEARCONNECTION
+DYNAMIC DBFB5COMMIT
+DYNAMIC DBFB5CONNECTION
+DYNAMIC DBFB5GETHANDLE
+DYNAMIC DBFB5ROLLBACK
+DYNAMIC FB5CLASS
+DYNAMIC FB5RDD
+DYNAMIC FB5RDD_GETFUNCTABLE
+DYNAMIC FB5_SETPK
+DYNAMIC FBCLOSE
+DYNAMIC FBCOMMIT
+DYNAMIC FBCOMMITTRANSACTION
+DYNAMIC FBCONNECT
+DYNAMIC FBCREATEDB
+DYNAMIC FBERROR
+DYNAMIC FBEXECUTE
+DYNAMIC FBFETCH
+DYNAMIC FBFREE
+DYNAMIC FBGETBLOB
+DYNAMIC FBGETDATA
+DYNAMIC FBQUERY
+DYNAMIC FBROLLBACK
+DYNAMIC FBROLLBACKTRANSACTION
+DYNAMIC FBSTARTTRANSACTION
+DYNAMIC TFBQUERY
+DYNAMIC TFBROW
+
+#if defined( __HBEXTREQ__ ) .OR. defined( __HBEXTERN__HBFIRD5__REQUEST )
+   #uncommand DYNAMIC <fncs,...> => EXTERNAL <fncs>
+#endif
+
+#endif

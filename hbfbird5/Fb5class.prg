@@ -56,6 +56,8 @@ CREATE CLASS Fb5class
    METHOD Update( oRow, cWhere )
    METHOD Delete( oRow, cWhere )
    METHOD Append( oRow )
+   METHOD   GetServerInfo()
+
 
    METHOD NetErr()   INLINE ::lError
    METHOD Error()    INLINE FBError( ::nError )
@@ -438,13 +440,14 @@ CREATE CLASS TFBQuery
    METHOD   FieldLen( nField )
    METHOD   FieldDec( nField )
    METHOD   FieldType( nField )
+   METHOD   LastRec()
 
    METHOD   FieldGet( nField )
    METHOD   GetRow()
    METHOD   GetBlankRow()
    METHOD   Blank()            INLINE ::GetBlankRow()
    METHOD   GetKeyField()
-
+  
 ENDCLASS
 
 METHOD New( nDB, cQuery, nDialect ) CLASS TFBQuery
@@ -458,6 +461,19 @@ METHOD New( nDB, cQuery, nDialect ) CLASS TFBQuery
    ::Refresh()
 
    RETURN Self
+
+METHOD LastRec() CLASS TFBQuery
+   LOCAL nTotal := 0
+   // Se você quiser manter a contagem exata para a barra de progresso:
+   // Como a query está ativa, podemos fazer um clone ou contar os elementos se já estiverem em cache,
+   // ou executar um COUNT rápido na mesma string de SQL.
+   // Para manter simples e compatível com sua lógica:
+   LOCAL oQCount := TFBQuery():New( ::db, "SELECT COUNT(*) FROM (" + ::query + ")", ::dialect )
+   IF oQCount != NIL
+      nTotal := Val( oQCount:FieldGet( 1 ) )
+      oQCount:Destroy()
+   ENDIF
+   RETURN nTotal
 
 METHOD Refresh() CLASS TFBQuery
 
@@ -855,6 +871,21 @@ STATIC FUNCTION KeyField( aTables, db, dialect )
 
    RETURN aKeys
 
+METHOD GetServerInfo() CLASS Fb5class
+   LOCAL oQuery, cVersion := ""
+
+   // Consulta a versão diretamente nas tabelas de sistema/contexto do Firebird 5
+   oQuery := ::Query("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') FROM rdb$database")
+   
+   IF oQuery != NIL
+      IF !oQuery:Eof()
+         cVersion := oQuery:FieldGet( 1 )
+      ENDIF
+      oQuery:Destroy()
+   ENDIF
+
+   RETURN AllTrim( cVersion )
+
 STATIC FUNCTION DataToSql( xField )
 
    SWITCH ValType( xField )
@@ -988,3 +1019,4 @@ STATIC FUNCTION RemoveSpaces( cQuery )
    ENDDO
 
    RETURN cQuery
+   

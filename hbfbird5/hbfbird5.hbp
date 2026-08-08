@@ -22,10 +22,13 @@
 #-std=c99
 -cflag=-std=c99
 
-${hb_name}.hbx
-
+{!xhb}-hbx=hbfird5.hbx
+{!xhb}hbfird5.hbx
 
 xhb.hbc
 firebird5.c
 Fb5class.prg
 FB5RDD.prg
+
+
+$hb_pkg_install.hbm
