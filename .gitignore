@@ -1,8 +1,8 @@
-*.c
-*.ch
 *.exe
 *.log
 *.o
 *.reso
 *.dll
 *.a
+/hbfbird5/lib/win/mingw/.hbmk
+/hbfbird5/.hbmk
