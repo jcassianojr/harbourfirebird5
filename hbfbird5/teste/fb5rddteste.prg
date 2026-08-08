@@ -7,9 +7,19 @@ REQUEST FB5RDD
 
 FUNCTION Main()
    LOCAL nConn, hConn
-   LOCAL cServer := "localhost:C:\temp\teste.fdb"
+   //LOCAL cServer := "localhost:C:\temp\teste.fdb"
+   LOCAL cPath   := "C:\temp\teste.fdb"
+   LOCAL cServer := "localhost:" + cPath
    LOCAL cUser   := "SYSDBA"
    LOCAL cPass   := "masterkey"
+
+// 1. VERIFICA E CRIA O BANCO DE DADOS FÍSICO SE NÃO EXISTIR
+   IF !File( cPath )
+      ? "Arquivo FDB não encontrado. Criando banco de dados físico..."
+      // Parâmetros: Server, User, Pass, PageSize, Charset, Dialect
+      FBCREATEDB( cServer, cUser, cPass, 4096, "NONE", 3 )
+      ? "Banco de dados criado com sucesso!"
+   ENDIF
 
    ? "Conectando ao Firebird 5 via RDD nativo..."
    nConn := DBFB5CONNECTION( cServer, cUser, cPass, 3 )
