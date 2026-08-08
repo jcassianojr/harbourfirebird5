@@ -9,6 +9,8 @@
 #include "fileio.ch"
 #include "error.ch"
 #include "dbstruct.ch"
+//#include "rddinfo.ch"  // <- ADICIONADO PARA RESOLVER RDDI_*
+#include "dbinfo.ch"   // <- ADICIONADO PARA RESOLVER DBI_*
 
 #define AREA_CONN         1
 #define AREA_TABLE        2
@@ -557,6 +559,32 @@ STATIC FUNCTION FB5_ValToSql( xField )
       RETURN iif( xField, "TRUE", "FALSE" )
    ENDSWITCH
    RETURN "NULL"
+   
+STATIC FUNCTION FB5_RDDINFO( nIndex, cargo )
+   LOCAL xRet := NIL
+   DO CASE
+      CASE nIndex == RDDI_TABLEEXT
+         xRet := ".fdb" 
+      CASE nIndex == RDDI_MEMOEXT
+         xRet := "" 
+      CASE nIndex == RDDI_ORDBAGEXT
+         xRet := "" 
+      OTHERWISE
+         xRet := UR_SUPER_RDDINFO( nIndex, cargo )
+   ENDCASE
+RETURN xRet
+
+STATIC FUNCTION FB5_INFO( nWA, nIndex, cargo )
+   LOCAL xRet := NIL
+   DO CASE
+      CASE nIndex == DBI_ISDBF
+         xRet := .F.
+      CASE nIndex == DBI_CANPUTREC
+         xRet := .T.
+      OTHERWISE
+         xRet := UR_SUPER_INFO( nWA, nIndex, cargo )
+   ENDCASE
+RETURN xRet   
 
 // +--------------------------------------------------------------------
 // +    Tabela de Roteamento de Metodos 
@@ -585,6 +613,8 @@ FUNCTION FB5RDD_GETFUNCTABLE( pFuncCount, pFuncTable, pSuperTable, nRddID )
    aMyFunc[ UR_FLUSH ]    := ( @FB5_FLUSH() )
    aMyFunc[ UR_APPEND ]   := ( @FB5_APPEND() )
    aMyFunc[ UR_DELETE ]   := ( @FB5_DELETE() )
+   aMyFunc[ UR_RDDINFO ]  := ( @FB5_RDDINFO() )
+   aMyFunc[ UR_INFO ]     := ( @FB5_INFO() )
 
    RETURN USRRDD_GETFUNCTABLE( pFuncCount, pFuncTable, pSuperTable, nRddID, cSuperRDD, aMyFunc )
 
