@@ -21,6 +21,12 @@
 
 /* GC object handlers */
 
+typedef struct vary1
+{
+   short vary_length;
+   char  vary_string[ 1 ];
+} VARY;
+
 static HB_GARBAGE_FUNC( FB_db_handle_release )
 {
    isc_db_handle * ph = ( isc_db_handle * ) Cargo;
@@ -471,8 +477,8 @@ HB_FUNC( FBGETDATA )
 
    if( aParam )
    {
-      XSQLVAR *        var;
-      XSQLDA *         sqlda = ( XSQLDA * ) hb_itemGetPtr( hb_itemArrayGet( aParam, 2 ) );
+      XSQLVAR *         var;
+      XSQLDA *          sqlda = ( XSQLDA * ) hb_itemGetPtr( hb_itemArrayGet( aParam, 2 ) );
       ISC_STATUS_ARRAY status;
 
       int pos = hb_parni( 2 ) - 1;
@@ -499,11 +505,56 @@ HB_FUNC( FBGETDATA )
 
          switch( dtype )
          {
-            case SQL_TEXT:
-            case SQL_VARYING:
-               hb_retclen( var->sqldata, var->sqllen );
-               break;
+case SQL_TEXT:
+            {
+               int len = var->sqllen;
+               if ( len <= 0 )
+               {
+                  hb_retc( "" );
+                  break;
+               }
 
+               char * temp_str = ( char * ) hb_xgrab( len + 1 );
+               memset( temp_str, 0, len + 1 );
+               memcpy( temp_str, var->sqldata, len );
+
+               while( len > 0 && ( temp_str[ len - 1 ] == ' ' || temp_str[ len - 1 ] == '\0' || temp_str[ len - 1 ] == '\r' || temp_str[ len - 1 ] == '\n' ) )
+               {
+                  len--;
+               }
+               temp_str[ len ] = '\0';
+
+               hb_retc( temp_str );
+               hb_xfree( temp_str );
+               break;
+            }
+
+            case SQL_VARYING:
+            {
+               VARY * vary = ( VARY * ) var->sqldata;
+               int vlen = ( int ) vary->vary_length;
+               
+               if ( vlen <= 0 || vlen > 32767 )
+               {
+                  hb_retc( "" );
+                  break;
+               }
+
+               char * temp_str = ( char * ) hb_xgrab( vlen + 1 );
+               memset( temp_str, 0, vlen + 1 );
+               memcpy( temp_str, vary->vary_string, vlen );
+               temp_str[ vlen ] = '\0';
+
+               while( vlen > 0 && ( temp_str[ vlen - 1 ] == ' ' || temp_str[ vlen - 1 ] == '\0' || temp_str[ vlen - 1 ] == '\r' || temp_str[ vlen - 1 ] == '\n' ) )
+               {
+                  vlen--;
+               }
+               temp_str[ vlen ] = '\0';
+
+               hb_retc( temp_str );
+               hb_xfree( temp_str );
+               break;
+            }
             case SQL_BOOLEAN:
                hb_retl( *( ISC_UCHAR * ) var->sqldata ? HB_TRUE : HB_FALSE );
                break;
@@ -511,13 +562,13 @@ HB_FUNC( FBGETDATA )
             case SQL_TIMESTAMP:
                isc_decode_timestamp( ( ISC_TIMESTAMP * ) var->sqldata, &times );
                hb_snprintf( date_s, sizeof( date_s ), "%04d-%02d-%02d %02d:%02d:%02d.%04d",
-                            times.tm_year + 1900,
-                            times.tm_mon + 1,
-                            times.tm_mday,
-                            times.tm_hour,
-                            times.tm_min,
-                            times.tm_sec,
-                            ( int ) ( ( ( ISC_TIMESTAMP * ) var->sqldata )->timestamp_time % 10000 ) );
+                          times.tm_year + 1900,
+                          times.tm_mon + 1,
+                          times.tm_mday,
+                          times.tm_hour,
+                          times.tm_min,
+                          times.tm_sec,
+                          ( int ) ( ( ( ISC_TIMESTAMP * ) var->sqldata )->timestamp_time % 10000 ) );
                hb_retc( date_s );
                break;
 
@@ -530,10 +581,10 @@ HB_FUNC( FBGETDATA )
             case SQL_TYPE_TIME:
                isc_decode_sql_time( ( ISC_TIME * ) var->sqldata, &times );
                hb_snprintf( date_s, sizeof( date_s ), "%02d:%02d:%02d.%04d",
-                            times.tm_hour,
-                            times.tm_min,
-                            times.tm_sec,
-                            ( int ) ( ( *( ( ISC_TIME * ) var->sqldata ) ) % 10000 ) );
+                          times.tm_hour,
+                          times.tm_min,
+                          times.tm_sec,
+                          ( int ) ( ( *( ( ISC_TIME * ) var->sqldata ) ) % 10000 ) );
                hb_retc( date_s );
                break;
 
@@ -549,8 +600,8 @@ HB_FUNC( FBGETDATA )
             case SQL_INT64:
             {
                ISC_INT64 value;
-               short     field_width;
-               short     dscale;
+               short      field_width;
+               short      dscale;
 
                switch( dtype )
                {
@@ -580,7 +631,7 @@ HB_FUNC( FBGETDATA )
                if( dscale < 0 )
                {
                   ISC_INT64 tens = 1;
-                  short     i;
+                  short      i;
 
                   for( i = 0; i > dscale; i-- )
                      tens *= 10;
@@ -609,7 +660,12 @@ HB_FUNC( FBGETDATA )
                else
                   hb_snprintf( data, sizeof( data ), "%*" ISC_INT64_FORMAT "d", field_width, ( ISC_INT64 ) value );
 
-               hb_retc( data );
+               // TRATAMENTO EXTRA PARA NUMÉRICOS CONVERTIDOS EM STRING: Remove espaços à esquerda gerados pelo formatador
+               {
+                  char * p = data;
+                  while( *p == ' ' ) p++;
+                  hb_retc( p );
+               }
                break;
             }
             case SQL_FLOAT:

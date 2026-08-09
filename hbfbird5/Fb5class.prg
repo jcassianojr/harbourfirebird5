@@ -192,12 +192,7 @@ METHOD ListTables() CLASS Fb5class
    LOCAL cQuery
    LOCAL qry
 
-   // Adicionado TRIM() para cortar os espaços do CHAR(31) do Firebird nativamente
-   cQuery := "select TRIM(rdb$relation_name) "
-   cQuery += "  from rdb$relations "
-   cQuery += " where rdb$relation_name not like 'RDB$%' "
-   cQuery += "   and rdb$view_blr is null "
-   cQuery += " order by 1 "
+   cQuery := "SELECT TRIM(RDB$RELATION_NAME) AS TABLE_NAME FROM RDB$RELATIONS WHERE COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND RDB$VIEW_BLR IS NULL ORDER BY RDB$RELATION_NAME"
 
    qry := FBQuery( ::db, RemoveSpaces( cQuery ), ::dialect )
 
@@ -899,11 +894,11 @@ STATIC FUNCTION KeyField( aTables, db, dialect )
 
    RETURN aKeys
 
+   
 METHOD GetServerInfo() CLASS Fb5class
    LOCAL oQuery, cVersion := ""
 
-   // Consulta a versão diretamente nas tabelas de sistema/contexto do Firebird 5
-   oQuery := ::Query("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') FROM rdb$database")
+   oQuery := ::Query("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') AS FB_VER FROM rdb$database")
    
    IF oQuery != NIL
       IF !oQuery:Eof()
@@ -913,6 +908,7 @@ METHOD GetServerInfo() CLASS Fb5class
    ENDIF
 
    RETURN AllTrim( cVersion )
+   
 
 STATIC FUNCTION DataToSql( xField )
 

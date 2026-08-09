@@ -505,7 +505,7 @@ HB_FUNC( FBGETDATA )
 
          switch( dtype )
          {
-case SQL_TEXT:
+            case SQL_TEXT:
             {
                int len = var->sqllen;
                if ( len <= 0 )
@@ -529,22 +529,26 @@ case SQL_TEXT:
                break;
             }
 
-            case SQL_VARYING:
+          case SQL_VARYING:
             {
+               // Utilizamos a struct nativa VARY (já declarada no topo) para garantir 
+               // o alinhamento exato de memória sem adivinhar ponteiros.
                VARY * vary = ( VARY * ) var->sqldata;
-               int vlen = ( int ) vary->vary_length;
-               
-               if ( vlen <= 0 || vlen > 32767 )
+               int vlen = vary->vary_length;
+
+               // Trava de segurança: se o tamanho for inválido, retorna vazio
+               if ( vlen <= 0 || vlen > var->sqllen )
                {
                   hb_retc( "" );
                   break;
                }
 
+               // Aloca e copia EXATAMENTE o tamanho informado pelo SGBD
                char * temp_str = ( char * ) hb_xgrab( vlen + 1 );
-               memset( temp_str, 0, vlen + 1 );
                memcpy( temp_str, vary->vary_string, vlen );
                temp_str[ vlen ] = '\0';
 
+               // Limpeza final de espaços ou quebras (garantia de metadado limpo)
                while( vlen > 0 && ( temp_str[ vlen - 1 ] == ' ' || temp_str[ vlen - 1 ] == '\0' || temp_str[ vlen - 1 ] == '\r' || temp_str[ vlen - 1 ] == '\n' ) )
                {
                   vlen--;
@@ -555,6 +559,7 @@ case SQL_TEXT:
                hb_xfree( temp_str );
                break;
             }
+
             case SQL_BOOLEAN:
                hb_retl( *( ISC_UCHAR * ) var->sqldata ? HB_TRUE : HB_FALSE );
                break;
