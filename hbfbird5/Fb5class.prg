@@ -192,7 +192,8 @@ METHOD ListTables() CLASS Fb5class
    LOCAL cQuery
    LOCAL qry
 
-   cQuery := "select rdb$relation_name "
+   // Adicionado TRIM() para cortar os espaços do CHAR(31) do Firebird nativamente
+   cQuery := "select TRIM(rdb$relation_name) "
    cQuery += "  from rdb$relations "
    cQuery += " where rdb$relation_name not like 'RDB$%' "
    cQuery += "   and rdb$view_blr is null "
@@ -216,7 +217,7 @@ METHOD TableStruct( cTable ) CLASS Fb5class
    LOCAL qry
 
    cQuery := "select "
-   cQuery += "  a.rdb$field_name,"
+   cQuery += "  TRIM(a.rdb$field_name),"
    cQuery += "  b.rdb$field_type,"
    cQuery += "  b.rdb$field_length,"
    cQuery += "  b.rdb$field_scale * -1,"
@@ -233,50 +234,77 @@ METHOD TableStruct( cTable ) CLASS Fb5class
 
    IF HB_ISARRAY( qry )
       DO WHILE FBFetch( qry ) == 0
-         cField  := iif( FBGetData( qry, 1 ) == NIL, "", FBGetData( qry, 1 ) )
+         cField  := RTrim( iif( FBGetData( qry, 1 ) == NIL, "", FBGetData( qry, 1 ) ) )
          nType   := Val( iif( FBGetData( qry, 2 ) == NIL, "0", FBGetData( qry, 2 ) ) )
          nSize   := Val( iif( FBGetData( qry, 3 ) == NIL, "0", FBGetData( qry, 3 ) ) )
          nDec    := Val( iif( FBGetData( qry, 4 ) == NIL, "0", FBGetData( qry, 4 ) ) )
-         cDomain := iif( FBGetData( qry, 5 ) == NIL, "", FBGetData( qry, 5 ) )
+         cDomain := RTrim( iif( FBGetData( qry, 5 ) == NIL, "", FBGetData( qry, 5 ) ) )
 
+         // Tratamento explícito para evitar ambiguidade (W0001) e uso correto de nType (W0032)
          SWITCH nType
-         CASE IB_SQL_BOOLEAN
-            cType := "L"; nSize := 1; nDec := 0; EXIT
-         CASE 7 // SMALLINT
-            IF "BOOL" $ cDomain
-               cType := "L"; nSize := 1; nDec := 0
-            ELSE
-               cType := "N"; nSize := 5
-            ENDIF
-            EXIT
-         CASE 8 // INTEGER
-         CASE 9
-            cType := "N"; nSize := 9; EXIT
-         CASE 10 // FLOAT
-         CASE 11
-            cType := "N"; nSize := 15; EXIT
-         CASE 12 // DATE
-            cType := "D"; nSize := 8; EXIT
-         CASE 13 // TIME
-            cType := "C"; nSize := 10; EXIT
-         CASE 14 // CHAR
-            cType := "C"; EXIT
-         CASE 16 // INT64
-            cType := "N"; nSize := 9; EXIT
-         CASE 27 // DOUBLE
-            cType := "N"; nSize := 15; EXIT
-         CASE 35 // TIMESTAMP
-            cType := "D"; nSize := 8; EXIT
-         CASE 37 // VARCHAR
-         CASE 40
-            cType := "C"; EXIT
-         CASE 261 // BLOB
-            cType := "M"; nSize := 10; EXIT
-         OTHERWISE
-            cType := "C"; nDec := 0
+            CASE IB_SQL_BOOLEAN
+               cType := "L"
+               nSize := 1
+               nDec  := 0
+               EXIT
+            CASE 7 // SMALLINT
+               IF "BOOL" $ cDomain
+                  cType := "L"
+                  nSize := 1
+                  nDec  := 0
+               ELSE
+                  cType := "N"
+                  nSize := 5
+               ENDIF
+               EXIT
+            CASE 8 // INTEGER
+            CASE 9
+               cType := "N"
+               nSize := 9
+               EXIT
+            CASE 10 // FLOAT
+            CASE 11
+               cType := "N"
+               nSize := 15
+               EXIT
+            CASE 12 // DATE
+               cType := "D"
+               nSize := 8
+               EXIT
+            CASE 13 // TIME
+               cType := "C"
+               nSize := 10
+               EXIT
+            CASE 14 // CHAR
+               cType := "C"
+               EXIT
+            CASE 16 // INT64
+               cType := "N"
+               nSize := 9
+               EXIT
+            CASE 27 // DOUBLE
+               cType := "N"
+               nSize := 15
+               EXIT
+            CASE 35 // TIMESTAMP
+               cType := "D"
+               nSize := 8
+               EXIT
+            CASE 37 // VARCHAR
+            CASE 40
+               cType := "C"
+               EXIT
+            CASE 261 // BLOB
+               cType := "M"
+               nSize := 10
+               EXIT
+            OTHERWISE
+               cType := "C"
+               nDec  := 0
          ENDSWITCH
 
          AAdd( result, { cField, cType, nSize, nDec } )
+
       ENDDO
       FBFree( qry )
    ENDIF

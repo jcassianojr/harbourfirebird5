@@ -501,27 +501,9 @@ HB_FUNC( FBGETDATA )
          {
             case SQL_TEXT:
             case SQL_VARYING:
-               {
-               // Cria um buffer temporário para tratar o texto recebido
-               int len = var->sqllen;
-               if( len > 1023 ) len = 1023; // Proteção para o buffer local se necessário, ou use o tamanho real
-               
-               // Copia os dados para uma string auxiliar segura
-               char * temp_str = ( char * ) hb_xgrab( var->sqllen + 1 );
-               memcpy( temp_str, var->sqldata, var->sqllen );
-               temp_str[ var->sqllen ] = '\0';
+               hb_retclen( var->sqldata, var->sqllen );
+               break;
 
-               // Remove os espaços em branco à direita e bytes nulos que o Firebird envia em colunas CHAR
-               while( len > 0 && ( temp_str[ len - 1 ] == ' ' || temp_str[ len - 1 ] == '\0' ) )
-               {
-                  len--;
-               }
-               temp_str[ len ] = '\0';
-
-               hb_retclen( temp_str, len );
-               hb_xfree( temp_str );
-              }
-              break;
             case SQL_BOOLEAN:
                hb_retl( *( ISC_UCHAR * ) var->sqldata ? HB_TRUE : HB_FALSE );
                break;
