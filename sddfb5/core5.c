@@ -502,8 +502,19 @@ static HB_ERRCODE fbGoTo( SQLBASEAREAP pArea, HB_ULONG ulRecNo )
                   break;
 
                case SQL_VARYING:
-                  pItem = hb_itemPutCL( pItem, pVar->sqldata + 2, *( short * ) pVar->sqldata );
+               {
+                  int vlen = ( int ) *( short * ) pVar->sqldata;
+
+                  if ( vlen <= 0 || vlen > pVar->sqllen )
+                  {
+                     pItem = hb_itemPutC( pItem, "" );
+                  }
+                  else
+                  {
+                     pItem = hb_itemPutCL( pItem, pVar->sqldata + 2, vlen );
+                  }
                   break;
+               }
 
                case SQL_BOOLEAN:
                   pItem = hb_itemPutL( pItem, *( ISC_UCHAR * ) pVar->sqldata ? HB_TRUE : HB_FALSE );

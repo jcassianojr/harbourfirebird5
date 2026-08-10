@@ -898,9 +898,12 @@ STATIC FUNCTION KeyField( aTables, db, dialect )
 METHOD GetServerInfo() CLASS Fb5class
    LOCAL oQuery, cVersion := ""
 
-   oQuery := ::Query("SELECT rdb$get_context('SYSTEM', 'ENGINE_VERSION') AS FB_VER FROM rdb$database")
+   oQuery := ::Query("SELECT CAST(rdb$get_context('SYSTEM', 'ENGINE_VERSION') AS CHAR(30)) AS VER FROM rdb$database")
    
    IF oQuery != NIL
+      // Realiza o Fetch no objeto para carregar o buffer e atualizar o status de Eof
+      oQuery:Fetch() 
+      
       IF !oQuery:Eof()
          cVersion := oQuery:FieldGet( 1 )
       ENDIF
@@ -908,7 +911,6 @@ METHOD GetServerInfo() CLASS Fb5class
    ENDIF
 
    RETURN AllTrim( cVersion )
-   
 
 STATIC FUNCTION DataToSql( xField )
 
