@@ -304,8 +304,11 @@ STATIC FUNCTION FB5_FETCH_NEXT( nWA )
          ELSE
             IF cType == HB_FT_LOGICAL
                xVal := ( Val( xVal ) == 1 .OR. Upper( AllTrim( xVal ) ) == "T" .OR. xVal == .T. )
+            //ELSEIF cType == HB_FT_DATE
+               //xVal := hb_SToD( Left( xVal, 4 ) + SubStr( xVal, 5, 2 ) + SubStr( xVal, 7, 2 ) )
             ELSEIF cType == HB_FT_DATE
-               xVal := hb_SToD( Left( xVal, 4 ) + SubStr( xVal, 5, 2 ) + SubStr( xVal, 7, 2 ) )
+               xVal := hb_SToD( Left( xVal, 4 ) + SubStr( xVal, 6, 2 ) + SubStr( xVal, 9, 2 ) )   
+               
             ELSEIF cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER
                xVal := Val( xVal )
             ENDIF
