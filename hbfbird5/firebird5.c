@@ -597,7 +597,8 @@ HB_FUNC( FBGETDATA )
             case SQL_QUAD:
             {
                ISC_QUAD * blob_id = ( ISC_QUAD * ) var->sqldata;
-               hb_retptr( ( void * ) blob_id );
+               // Exporta o ID binário do Blob como string constante em vez de ponteiro solto
+               hb_retclen( ( const char * ) blob_id, sizeof( ISC_QUAD ) );
                break;
             }
             case SQL_SHORT:
@@ -702,8 +703,18 @@ HB_FUNC( FBGETBLOB )
       isc_blob_handle  blob_handle = ( isc_blob_handle ) 0;
       short      blob_seg_len;
       char       blob_segment[ 512 ];
-      ISC_QUAD * blob_id = ( ISC_QUAD * ) hb_parptr( 2 );
+      
+      ISC_QUAD   blob_id;
       ISC_STATUS blob_stat;
+
+      // Valida e copia a string binária de 8 bytes recebida do Harbour
+      if ( hb_parclen( 2 ) == sizeof( ISC_QUAD ) )
+         memcpy( &blob_id, hb_parcx( 2 ), sizeof( ISC_QUAD ) );
+      else
+      {
+         hb_retc( "" );
+         return;
+      }
 
       if( HB_ISPOINTER( 3 ) )
          trans = ( isc_tr_handle ) ( HB_PTRUINT ) hb_parptr( 3 );
@@ -716,7 +727,8 @@ HB_FUNC( FBGETBLOB )
          }
       }
 
-      if( isc_open_blob2( status, &db, &trans, &blob_handle, blob_id, 0, NULL ) )
+      // CORREÇÃO CRÍTICA: blob_id passado por referência (&blob_id)
+      if( isc_open_blob2( status, &db, &trans, &blob_handle, &blob_id, 0, NULL ) )
       {
          hb_retnl( isc_sqlcode( status ) );
          return;

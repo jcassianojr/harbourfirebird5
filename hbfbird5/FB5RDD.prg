@@ -31,6 +31,8 @@
 ANNOUNCE FB5RDD
 
 STATIC s_aConnections := {}
+THREAD STATIC t_lLoadBlobs := .F.
+THREAD STATIC t_lLoadMemos := .F.
 
 // +--------------------------------------------------------------------
 // +    Funções de Gerenciamento de Conexão e Transação (Otimizadas)[cite: 17]
@@ -125,7 +127,7 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    LOCAL cName, nType, nSize, nDec, cType
    LOCAL aLocalPrecision := {}
    LOCAL nPosMeta
-   LOCAL cFldName, xPrec, xLen
+   LOCAL cFldName, xPrec, xLen,xSubType
 
    // 1. Resgata a conexão e o dialeto guardados no array interno
    IF !Empty( aOpenInfo[ UR_OI_CONNECT ] ) .AND. aOpenInfo[ UR_OI_CONNECT ] <= Len( s_aConnections )
@@ -147,7 +149,9 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    cTableName := AllTrim( aOpenInfo[ UR_OI_NAME ] )
 
    // 2. Consulta direta aos Metadados para obter a precisão exata dos campos
-   qryMeta := FBQuery( db, "SELECT TRIM(A.RDB$FIELD_NAME), B.RDB$FIELD_PRECISION, B.RDB$CHARACTER_LENGTH FROM RDB$RELATION_FIELDS A JOIN RDB$FIELDS B ON A.RDB$FIELD_SOURCE = B.RDB$FIELD_NAME WHERE TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "'", dialect )
+   //qryMeta := FBQuery( db, "SELECT TRIM(A.RDB$FIELD_NAME), B.RDB$FIELD_PRECISION, B.RDB$CHARACTER_LENGTH FROM RDB$RELATION_FIELDS A JOIN RDB$FIELDS B ON A.RDB$FIELD_SOURCE = B.RDB$FIELD_NAME WHERE TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "'", dialect )
+  // Altere a Query para capturar o RDB$FIELD_SUB_TYPE
+   qryMeta := FBQuery( db, "SELECT TRIM(A.RDB$FIELD_NAME), B.RDB$FIELD_PRECISION, B.RDB$CHARACTER_LENGTH, B.RDB$FIELD_SUB_TYPE FROM RDB$RELATION_FIELDS A JOIN RDB$FIELDS B ON A.RDB$FIELD_SOURCE = B.RDB$FIELD_NAME WHERE TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "'", dialect )
    
    IF HB_ISARRAY( qryMeta )
       WHILE FBFetch( qryMeta ) == 0
@@ -156,13 +160,16 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
          cFldName := FBGetData( qryMeta, 1 )
          xPrec    := FBGetData( qryMeta, 2 )
          xLen     := FBGetData( qryMeta, 3 )
+         xSubType := FBGetData( qryMeta, 4 ) // Novo
          
          // Trata possíveis valores NIL (NULL do banco) antes de converter para evitar o erro BASE/1098
          cFldName := iif( cFldName == NIL, "", Upper( AllTrim( cFldName ) ) )
          xPrec    := iif( xPrec == NIL, 0, Val( xPrec ) )
          xLen     := iif( xLen == NIL, 0, Val( xLen ) )
+         xSubType := iif( xSubType == NIL, 1, Val( xSubType ) )
          
-         AAdd( aLocalPrecision, { cFldName, xPrec, xLen } )
+         //AAdd( aLocalPrecision, { cFldName, xPrec, xLen } )
+         AAdd( aLocalPrecision, { cFldName, xPrec, xLen, xSubType } )
          
       ENDDO
       FBFree( qryMeta )
@@ -240,8 +247,12 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
             nSize := 8
             nDec := 0
             EXIT
-         CASE 520
+        CASE 520
             cType := HB_FT_MEMO
+            nPosMeta := AScan( aLocalPrecision, {|x| x[1] == cName } )
+            IF nPosMeta > 0 .AND. aLocalPrecision[ nPosMeta, 4 ] == 0 // 0 = Binário
+               cType := HB_FT_OLE
+            ENDIF
             nSize := 10
             nDec := 0
             EXIT
@@ -311,6 +322,13 @@ STATIC FUNCTION FB5_FETCH_NEXT( nWA )
                
             ELSEIF cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER
                xVal := Val( xVal )
+            
+            ELSEIF cType == HB_FT_MEMO .OR. cType == HB_FT_OLE
+               // Isola o ID interno do Firebird
+               IF ValType( xVal ) == "C" .AND. Len( xVal ) == 8
+                  xVal := { "FB_BLOB", xVal }
+               ENDIF   
+               
             ENDIF
          ENDIF
          aRow[ i ] := xVal
@@ -333,15 +351,44 @@ STATIC FUNCTION FB5_CLOSE( nWA )
 
 STATIC FUNCTION FB5_GETVALUE( nWA, nField, xValue )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
+   LOCAL cType   := aWAData[ AREA_TYPES ][ nField ]
+   LOCAL xRaw
+
    IF aWAData[ AREA_APPEND ] .AND. !Empty( aWAData[ AREA_ROWBUF ] )
-      xValue := aWAData[ AREA_ROWBUF ][ nField ]
+      xRaw := aWAData[ AREA_ROWBUF ][ nField ]
    ELSEIF aWAData[ AREA_RECNO ] > 0 .AND. aWAData[ AREA_RECNO ] <= Len( aWAData[ AREA_CACHE ] )
-      xValue := aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ], nField ]
+      xRaw := aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ], nField ]
+   ENDIF
+
+   IF cType == HB_FT_MEMO .OR. cType == HB_FT_OLE
+      IF HB_ISARRAY( xRaw ) .AND. Len( xRaw ) == 2 .AND. xRaw[ 1 ] == "FB_BLOB"
+         IF cType == HB_FT_OLE
+            xValue := iif( t_lLoadBlobs, FB5_RealFetchBlob( nWA, xRaw[ 2 ] ), "<IMAGEM/BLOB>" )
+         ELSE
+            xValue := iif( t_lLoadMemos, FB5_RealFetchBlob( nWA, xRaw[ 2 ] ), "<MEMO>" )
+         ENDIF
+      ELSE
+         xValue := xRaw 
+      ENDIF
+   ELSE
+      xValue := xRaw
    ENDIF
    RETURN SUCCESS
 
 STATIC FUNCTION FB5_PUTVALUE( nWA, nField, xValue )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
+   LOCAL cType   := aWAData[ AREA_TYPES ][ nField ]
+   
+   IF cType == HB_FT_OLE
+      IF ( ValType( xValue ) == "C" .AND. xValue == "<IMAGEM/BLOB>" ) .OR. .NOT. t_lLoadBlobs
+         RETURN SUCCESS
+      ENDIF
+   ELSEIF cType == HB_FT_MEMO
+      IF ( ValType( xValue ) == "C" .AND. xValue == "<MEMO>" ) .OR. .NOT. t_lLoadMemos
+         RETURN SUCCESS
+      ENDIF
+   ENDIF
+
    IF Empty( aWAData[ AREA_ROWBUF ] )
       IF aWAData[ AREA_RECNO ] > 0 .AND. aWAData[ AREA_RECNO ] <= Len( aWAData[ AREA_CACHE ] )
          aWAData[ AREA_ROWBUF ] := AClone( aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ] ] )
@@ -628,3 +675,51 @@ FUNCTION FB5RDD_GETFUNCTABLE( pFuncCount, pFuncTable, pSuperTable, nRddID )
 INIT PROC FB5_INIT_REGISTER()
    rddRegister( "FB5RDD", RDT_FULL )
    RETURN
+   
+STATIC FUNCTION FB5_RealFetchBlob( nWA, cBlobId )
+   LOCAL aWAData := USRRDD_AREADATA( nWA )
+   LOCAL db      := aWAData[ AREA_CONN ][ 1 ]
+   LOCAL aChunks, cData := "", i
+   
+   aChunks := FBGetBlob( db, cBlobId )
+   IF HB_ISARRAY( aChunks )
+      FOR i := 1 TO Len( aChunks )
+         cData += aChunks[ i ]
+      NEXT
+   ENDIF
+   RETURN cData
+
+PROCEDURE FB5_SetLoadBlobs( lLoad ); t_lLoadBlobs := lLoad; RETURN
+PROCEDURE FB5_SetLoadMemos( lLoad ); t_lLoadMemos := lLoad; RETURN
+
+FUNCTION FB5_PegarMemo( cCampo )
+   LOCAL cTxt, lAnt := t_lLoadMemos
+   FB5_SetLoadMemos( .T. )
+   cTxt := FieldGet( FieldPos( cCampo ) )
+   FB5_SetLoadMemos( lAnt )
+   RETURN iif( Empty( cTxt ) .OR. cTxt == "<MEMO>", "", cTxt )
+   
+FUNCTION FB5_GravarMemo( cCampo, cTxt )
+   LOCAL lAnt := t_lLoadMemos
+   IF ValType( cTxt ) != "C"; RETURN .F.; ENDIF
+   FB5_SetLoadMemos( .T. )
+   FieldPut( FieldPos( cCampo ), cTxt )
+   FB5_SetLoadMemos( lAnt )
+   RETURN .T. 
+
+FUNCTION FB5_PegarBlobJpg( cCampo, cDir )
+   LOCAL cBin, lAnt := t_lLoadBlobs
+   FB5_SetLoadBlobs( .T. )
+   cBin := FieldGet( FieldPos( cCampo ) )
+   FB5_SetLoadBlobs( lAnt )
+   IF Empty( cBin ) .OR. cBin == "<IMAGEM/BLOB>"; RETURN .F.; ENDIF
+   RETURN hb_memowrit( cDir, cBin )
+   
+FUNCTION FB5_GravarBlobJpg( cCampo, cDir )
+   LOCAL cBin, lAnt := t_lLoadBlobs
+   IF !hb_FileExists( cDir ); RETURN .F.; ENDIF
+   cBin := hb_memoread( cDir )
+   FB5_SetLoadBlobs( .T. )
+   FieldPut( FieldPos( cCampo ), cBin )
+   FB5_SetLoadBlobs( lAnt )
+   RETURN .T.   
