@@ -208,7 +208,7 @@ METHOD ListTables() CLASS Fb5class
 METHOD TableStruct( cTable ) CLASS Fb5class
 
    LOCAL result := {}
-   LOCAL cQuery, cType, nSize, cDomain, cField, nType, nDec
+   LOCAL cQuery, cType, nSize, cDomain, cField, nType, nDec,nSubType
    LOCAL qry
 
    cQuery := "select "
@@ -216,7 +216,8 @@ METHOD TableStruct( cTable ) CLASS Fb5class
    cQuery += "  b.rdb$field_type,"
    cQuery += "  b.rdb$field_length,"
    cQuery += "  b.rdb$field_scale * -1,"
-   cQuery += "  a.rdb$field_source "
+   cQuery += "  a.rdb$field_source,"
+   cQuery += "  b.rdb$field_sub_type " // Inserido para ler o Subtipo
    cQuery += "from "
    cQuery += "  rdb$relation_fields a, rdb$fields b "
    cQuery += "where "
@@ -233,6 +234,7 @@ METHOD TableStruct( cTable ) CLASS Fb5class
          nType   := Val( iif( FBGetData( qry, 2 ) == NIL, "0", FBGetData( qry, 2 ) ) )
          nSize   := Val( iif( FBGetData( qry, 3 ) == NIL, "0", FBGetData( qry, 3 ) ) )
          nDec    := Val( iif( FBGetData( qry, 4 ) == NIL, "0", FBGetData( qry, 4 ) ) )
+         nSubType := Val( iif( FBGetData( qry, 6 ) == NIL, "0", FBGetData( qry, 6 ) ) ) // Captura o Subtipo
          cDomain := RTrim( iif( FBGetData( qry, 5 ) == NIL, "", FBGetData( qry, 5 ) ) )
 
          // Tratamento explícito para evitar ambiguidade (W0001) e uso correto de nType (W0032)
@@ -289,8 +291,12 @@ METHOD TableStruct( cTable ) CLASS Fb5class
             CASE 40
                cType := "C"
                EXIT
-            CASE 261 // BLOB
-               cType := "M"
+           CASE 261 // BLOB
+               IF nSubType == 0
+                  cType := "G" // Binário / OLE
+               ELSE
+                  cType := "M" // Texto / MEMO
+               ENDIF
                nSize := 10
                EXIT
             OTHERWISE
@@ -322,7 +328,7 @@ METHOD Delete( oRow, cWhere ) CLASS Fb5class
             nField := oRow:FieldPos( aKeys[ i ] )
             xField := oRow:FieldGet( nField )
 
-            cWhere += aKeys[ i ] + "=" + DataToSql( xField )
+            cWhere += aKeys[ i ] + "=" + DataToSql( xField, oRow:FieldType( nField ))
 
             IF i != Len( aKeys )
                cWhere += ","
@@ -357,7 +363,7 @@ METHOD Append( oRow ) CLASS Fb5class
 
       FOR i := 1 TO oRow:FCount()
          IF oRow:Changed( i )
-            cQuery += DataToSql( oRow:FieldGet( i ) ) + ","
+            cQuery += DataToSql( oRow:FieldGet( i ), oRow:FieldType( i ) ) + ","
          ENDIF
       NEXT
 
@@ -411,7 +417,7 @@ METHOD Update( oRow, cWhere ) CLASS Fb5class
       cQuery := "UPDATE " + aTables[ 1 ] + " SET "
       FOR i := 1 TO oRow:FCount()
          IF oRow:Changed( i )
-            cQuery += oRow:FieldName( i ) + " = " + DataToSql( oRow:FieldGet( i ) ) + ","
+            cQuery += oRow:FieldName( i ) + " = " + DataToSql( oRow:FieldGet( i ), oRow:FieldType( i )) + ","
          ENDIF
       NEXT
 
@@ -648,7 +654,7 @@ METHOD FieldGet( nField ) CLASS TFBQuery
       result := FBGetData( ::qry, nField )
       cType := ::aStruct[ nField ][ 2 ]
 
-      IF cType == "M"
+      IF cType == "M" .OR. cType == "G"
          IF result != NIL
             aBlob := FBGetBlob( ::db, result )
             result := ""
@@ -717,6 +723,9 @@ METHOD GetBlankRow() CLASS TFBQuery
          CASE "M"
             aRow[ i ] := ""
             EXIT
+         CASE "G" // Iniciar Vazio
+            aRow[ i ] := ""
+            EXIT   
          CASE "N"
             aRow[ i ] := 0
             EXIT
@@ -912,12 +921,16 @@ METHOD GetServerInfo() CLASS Fb5class
 
    RETURN AllTrim( cVersion )
 
-STATIC FUNCTION DataToSql( xField )
-
+STATIC FUNCTION DataToSql( xField,cType )
+hb_default( @cType, "" ) // Proteção obrigatória adicionada
    SWITCH ValType( xField )
    CASE "C"
-   CASE "M"
-      RETURN "'" + StrTran( xField, "'", "''" ) + "'"
+  CASE "M"
+      IF cType == "G" .OR. cType == "M" 
+         RETURN "X'" + hb_StrToHex( xField ) + "'"
+      ELSE
+         RETURN "'" + StrTran( xField, "'", "''" ) + "'"
+      ENDIF
    CASE "D"
       IF Empty( xField ); RETURN "NULL"; ENDIF
       RETURN "'" + StrZero( Year( xField ), 4 ) + "-" + StrZero( Month( xField ), 2 ) + "-" + StrZero( Day( xField ), 2 ) + "'"
@@ -937,6 +950,7 @@ STATIC FUNCTION StructConvert( aStru, db, dialect )
    LOCAL cType
    LOCAL nSize
    LOCAL nDec
+   LOCAL nSubType
    LOCAL cTable
    LOCAL cDomain
    LOCAL i
@@ -978,11 +992,19 @@ STATIC FUNCTION StructConvert( aStru, db, dialect )
       FBFree( qry )
 
       FOR i := 1 TO Len( aStru )
-         cField  := RTrim( aStru[ i ][ 7 ] )
+        
+        cField  := RTrim( aStru[ i ][ 7 ] )
          nType   := aStru[ i ][ 2 ]
          nSize   := aStru[ i ][ 3 ]
-         nDec    := aStru[ i ][ 4 ] * -1
          cTable  := RTrim( aStru[ i ][ 5 ] )
+
+         IF nType == IB_SQL_BLOB
+            nSubType := aStru[ i ][ 4 ]
+            nDec     := 0
+         ELSE
+            nSubType := 0
+            nDec     := aStru[ i ][ 4 ] * -1
+         ENDIF
 
          nVal := AScan( aDomains, {| x | RTrim( x[ 1 ] ) == cTable .AND. RTrim( x[ 2 ] ) == cField } )
 
@@ -1026,7 +1048,12 @@ STATIC FUNCTION StructConvert( aStru, db, dialect )
             cType := "C"; nSize := 8; EXIT
 
          CASE IB_SQL_BLOB
-            cType := "M"; nSize := 10; EXIT
+            IF nSubType == 0
+               cType := "G"
+            ELSE
+               cType := "M"
+            ENDIF
+            nSize := 10; EXIT
 
          OTHERWISE
             cType := "C"; nDec := 0
