@@ -307,13 +307,11 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
 
 STATIC FUNCTION FB5_FETCH_NEXT( nWA )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
-   LOCAL qry := aWAData[ AREA_QUERY ] //, db := aWAData[ AREA_CONN ][ 1 ]
+   LOCAL qry := aWAData[ AREA_QUERY ]
    LOCAL aRow, i, nCols, xVal, cType
 
    IF aWAData[ AREA_FETCHED_EOF ]; RETURN .F.; ENDIF
 
-   // TODO: Melhoria Futura 3 - Descer o processamento de linha (Loop/Conversões)
-   // inteiramente para uma função em C: SR_FBLINEPROCESSED5(qry, @aRow)[cite: 17]
    IF FBFetch( qry ) == 0
       nCols := qry[ 4 ]
       aRow  := Array( nCols )
@@ -331,17 +329,18 @@ STATIC FUNCTION FB5_FETCH_NEXT( nWA )
             ENDCASE
          ELSE
             IF cType == HB_FT_LOGICAL
-               xVal := ( Val( xVal ) == 1 .OR. Upper( AllTrim( xVal ) ) == "T" .OR. xVal == .T. )
-            //ELSEIF cType == HB_FT_DATE
-               //xVal := hb_SToD( Left( xVal, 4 ) + SubStr( xVal, 5, 2 ) + SubStr( xVal, 7, 2 ) )
-            ELSEIF cType == HB_FT_DATE
-               xVal := hb_SToD( Left( xVal, 4 ) + SubStr( xVal, 6, 2 ) + SubStr( xVal, 9, 2 ) )   
+               // --- CONVERSOR INTELIGENTE: Lógico ---[cite: 15]
+               xVal := strlogicrdd( xVal, .F. )
+               
+            ELSEIF cType == HB_FT_DATE .OR. cType == HB_FT_TIMESTAMP
+               // --- CONVERSOR INTELIGENTE: Data/Hora ---[cite: 15]
+               xVal := StrDateRdd( xVal )
                
             ELSEIF cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER
                xVal := Val( xVal )
             
             ELSEIF cType == HB_FT_MEMO .OR. cType == HB_FT_OLE
-               // Isola o ID interno do Firebird
+               // Isola o ID interno do Firebird[cite: 17]
                IF ValType( xVal ) == "C" .AND. Len( xVal ) == 8
                   xVal := { "FB_BLOB", xVal }
                ENDIF   
@@ -740,3 +739,116 @@ FUNCTION FB5_GravarBlobJpg( cCampo, cDir )
    FieldPut( FieldPos( cCampo ), cBin )
    FB5_SetLoadBlobs( lAnt )
    RETURN .T.   
+   
+ // +--------------------------------------------------------------------
+// +    Static Function strlogicrdd( cVAL, lDEFAULT )
+// +    Conversor universal de retornos textuais/numéricos para Booleano
+// +--------------------------------------------------------------------
+STATIC FUNCTION strlogicrdd( cVAL, lDEFAULT )
+
+   IF ValType( lDEFAULT ) <> "L"
+      lDEFAULT := .F.
+   ENDIF
+   
+   IF ValType( cVAL ) != "C"
+      cVAL := hb_ValToStr( cVAL )
+   ENDIF
+
+   SWITCH Upper( AllTrim( cVal ) )
+   CASE ".T."
+   CASE "TRUE"
+   CASE "YES"
+   CASE "SIM"
+   CASE "ON"
+   CASE "Y"
+   CASE "1"
+   CASE "T"
+   CASE "S"
+      RETURN .T.
+   CASE ".F."
+   CASE "FALSE"
+   CASE "NO"
+   CASE "NAO"
+   CASE "OFF"
+   CASE "N"
+   CASE "0"
+   CASE "F"
+   CASE "<NULL>"
+   CASE "NULL"
+   CASE "NUL"
+   CASE "NIL"
+      RETURN .F.
+   ENDSWITCH
+
+   RETURN lDEFAULT
+
+// +--------------------------------------------------------------------
+// +    Static Function StrDateRdd( xData )
+// +    Conversor inteligente de datas universal para o RDD
+// +--------------------------------------------------------------------
+STATIC FUNCTION StrDateRdd( xData )
+   LOCAL dRet := CToD( "" )
+   LOCAL cTemp, aParts, cAno, cMes, cDia, nAno
+
+   IF ValType( xData ) == "D"
+      RETURN xData
+   ENDIF
+
+   IF ValType( xData ) <> "C" .OR. Empty( xData ) .OR. xData == "NULL"
+      RETURN dRet
+   ENDIF
+
+   xData := AllTrim( xData )
+
+   cTemp := StrTran( xData, "-", "/" )
+   cTemp := StrTran( cTemp, ".", "/" )
+
+   aParts := hb_ATokens( cTemp, "/" )
+
+   IF Len( aParts ) >= 3
+      IF Len( aParts[ 1 ] ) == 4
+         cAno := aParts[ 1 ]
+         cMes := StrZero( Val( aParts[ 2 ] ), 2 )
+         cDia := StrZero( Val( Left( aParts[ 3 ], 2 ) ), 2 )
+      ELSE
+         cDia := StrZero( Val( aParts[ 1 ] ), 2 )
+         cMes := StrZero( Val( aParts[ 2 ] ), 2 )
+         cAno := Left( aParts[ 3 ], 4 )
+         
+         IF Len( cAno ) == 2
+            nAno := Val( cAno )
+            IF nAno < 50
+               cAno := "20" + cAno
+            ELSE
+               cAno := "19" + cAno
+            ENDIF
+         ENDIF
+      ENDIF
+      
+      IF cAno + cMes + cDia == "00000000"
+         RETURN dRet
+      ENDIF
+      
+      RETURN SToD( cAno + cMes + cDia )
+   ELSE
+      IF Len( cTemp ) == 8
+         IF Val( Left( cTemp, 4 ) ) > 1900
+            dRet := SToD( cTemp )
+         ELSE
+            dRet := SToD( Right( cTemp, 4 ) + SubStr( cTemp, 3, 2 ) + Left( cTemp, 2 ) )
+         ENDIF
+      ELSEIF Len( cTemp ) == 6
+         nAno := Val( Right( cTemp, 2 ) )
+         IF nAno < 50
+            cAno := "20" + Right( cTemp, 2 )
+         ELSE
+            cAno := "19" + Right( cTemp, 2 )
+         ENDIF
+         dRet := SToD( cAno + SubStr( cTemp, 3, 2 ) + Left( cTemp, 2 ) )
+      ELSE
+         dRet := CToD( xData )
+      ENDIF
+   ENDIF
+
+   RETURN dRet
+  
