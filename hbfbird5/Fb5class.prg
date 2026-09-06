@@ -673,15 +673,17 @@ METHOD FieldGet( nField ) CLASS TFBQuery
          ENDIF
 
       ELSEIF cType == "D"
+         // --- CONVERSOR INTELIGENTE: Data/Hora ---[cite: 20]
          IF result != NIL
-            result := hb_SToD( Left( result, 4 ) + SubStr( result, 5, 2 ) + SubStr( result, 7, 2 ) )
+            result := StrDateClass( result )
          ELSE
             result := hb_SToD()
          ENDIF
 
       ELSEIF cType == "L"
+         // --- CONVERSOR INTELIGENTE: Lógico ---[cite: 20]
          IF result != NIL
-            result := ( Val( result ) == 1 .OR. Upper( AllTrim( result ) ) == "T" .OR. result == .T. )
+            result := strlogicClasse( result, .F. )
          ELSE
             result := .F.
          ENDIF
@@ -1073,3 +1075,116 @@ STATIC FUNCTION RemoveSpaces( cQuery )
 
    RETURN cQuery
    
+// +--------------------------------------------------------------------
+// +
+// +    Static Function strlogicClasse( cVAL, lDEFAULT )
+// +    Conversor universal de retornos textuais/numéricos para Booleano
+// +
+// +--------------------------------------------------------------------
+STATIC FUNCTION strlogicClasse( cVAL, lDEFAULT )
+
+   IF ValType( lDEFAULT ) <> "L"
+      lDEFAULT := .F.
+   ENDIF
+   
+   IF ValType( cVAL ) != "C"
+      cVAL := hb_ValToStr( cVAL )
+   ENDIF
+   
+   SWITCH Upper( AllTrim( cVal ) )
+   CASE ".T."
+   CASE "TRUE"
+   CASE "YES"
+   CASE "SIM"
+   CASE "ON"
+   CASE "Y"
+   CASE "1"
+   CASE "T"
+   CASE "S"
+      RETURN .T.
+   CASE ".F."
+   CASE "FALSE"
+   CASE "NO"
+   CASE "NAO"
+   CASE "OFF"
+   CASE "N"
+   CASE "0"
+   CASE "F"
+   CASE "<NULL>"
+   CASE "NULL"
+   CASE "NUL"
+   CASE "NIL"
+      RETURN .F.
+   ENDSWITCH
+
+   RETURN lDEFAULT
+   
+// +--------------------------------------------------------------------
+// +    Static Function StrDateClass( xData )
+// +    Conversor inteligente de datas universal para as Classes PG
+// +--------------------------------------------------------------------
+STATIC FUNCTION StrDateClass( xData )
+   LOCAL dRet := CToD( "" )
+   LOCAL cTemp, aParts, cAno, cMes, cDia, nAno
+
+   IF ValType( xData ) == "D"
+      RETURN xData
+   ENDIF
+
+   IF ValType( xData ) <> "C" .OR. Empty( xData ) .OR. xData == "NULL"
+      RETURN dRet
+   ENDIF
+
+   xData := AllTrim( xData )
+
+   cTemp := StrTran( xData, "-", "/" )
+   cTemp := StrTran( cTemp, ".", "/" )
+
+   aParts := hb_ATokens( cTemp, "/" )
+
+   IF Len( aParts ) >= 3
+      IF Len( aParts[ 1 ] ) == 4
+         cAno := aParts[ 1 ]
+         cMes := StrZero( Val( aParts[ 2 ] ), 2 )
+         cDia := StrZero( Val( Left( aParts[ 3 ], 2 ) ), 2 )
+      ELSE
+         cDia := StrZero( Val( aParts[ 1 ] ), 2 )
+         cMes := StrZero( Val( aParts[ 2 ] ), 2 )
+         cAno := Left( aParts[ 3 ], 4 )
+         
+         IF Len( cAno ) == 2
+            nAno := Val( cAno )
+            IF nAno < 50
+               cAno := "20" + cAno
+            ELSE
+               cAno := "19" + cAno
+            ENDIF
+         ENDIF
+      ENDIF
+      
+      IF cAno + cMes + cDia == "00000000"
+         RETURN dRet
+      ENDIF
+      
+      RETURN SToD( cAno + cMes + cDia )
+   ELSE
+      IF Len( cTemp ) == 8
+         IF Val( Left( cTemp, 4 ) ) > 1900
+            dRet := SToD( cTemp )
+         ELSE
+            dRet := SToD( Right( cTemp, 4 ) + SubStr( cTemp, 3, 2 ) + Left( cTemp, 2 ) )
+         ENDIF
+      ELSEIF Len( cTemp ) == 6
+         nAno := Val( Right( cTemp, 2 ) )
+         IF nAno < 50
+            cAno := "20" + Right( cTemp, 2 )
+         ELSE
+            cAno := "19" + Right( cTemp, 2 )
+         ENDIF
+         dRet := SToD( cAno + SubStr( cTemp, 3, 2 ) + Left( cTemp, 2 ) )
+      ELSE
+         dRet := CToD( xData )
+      ENDIF
+   ENDIF
+
+   RETURN dRet   
