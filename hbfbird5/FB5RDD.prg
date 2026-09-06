@@ -120,14 +120,15 @@ STATIC FUNCTION FB5_ADDFIELD( nWA, aField )
    ENDIF
    RETURN UR_SUPER_ADDFIELD( nWA, aField )
 
+
 STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
-   LOCAL db, dialect, qry, oError, qryMeta
+   LOCAL db, dialect, qry, oError, qryMeta, qryPk
    LOCAL i, nCols, aStru, cTableName, aField
    LOCAL cName, nType, nSize, nDec, cType
    LOCAL aLocalPrecision := {}
    LOCAL nPosMeta
-   LOCAL cFldName, xPrec, xLen,xSubType
+   LOCAL cFldName, xPrec, xLen, xSubType, cPkField
 
    // 1. Resgata a conexão e o dialeto guardados no array interno
    IF !Empty( aOpenInfo[ UR_OI_CONNECT ] ) .AND. aOpenInfo[ UR_OI_CONNECT ] <= Len( s_aConnections )
@@ -149,8 +150,6 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    cTableName := AllTrim( aOpenInfo[ UR_OI_NAME ] )
 
    // 2. Consulta direta aos Metadados para obter a precisão exata dos campos
-   //qryMeta := FBQuery( db, "SELECT TRIM(A.RDB$FIELD_NAME), B.RDB$FIELD_PRECISION, B.RDB$CHARACTER_LENGTH FROM RDB$RELATION_FIELDS A JOIN RDB$FIELDS B ON A.RDB$FIELD_SOURCE = B.RDB$FIELD_NAME WHERE TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "'", dialect )
-  // Altere a Query para capturar o RDB$FIELD_SUB_TYPE
    qryMeta := FBQuery( db, "SELECT TRIM(A.RDB$FIELD_NAME), B.RDB$FIELD_PRECISION, B.RDB$CHARACTER_LENGTH, B.RDB$FIELD_SUB_TYPE FROM RDB$RELATION_FIELDS A JOIN RDB$FIELDS B ON A.RDB$FIELD_SOURCE = B.RDB$FIELD_NAME WHERE TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "'", dialect )
    
    IF HB_ISARRAY( qryMeta )
@@ -160,7 +159,7 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
          cFldName := FBGetData( qryMeta, 1 )
          xPrec    := FBGetData( qryMeta, 2 )
          xLen     := FBGetData( qryMeta, 3 )
-         xSubType := FBGetData( qryMeta, 4 ) // Novo
+         xSubType := FBGetData( qryMeta, 4 ) 
          
          // Trata possíveis valores NIL (NULL do banco) antes de converter para evitar o erro BASE/1098
          cFldName := iif( cFldName == NIL, "", Upper( AllTrim( cFldName ) ) )
@@ -168,7 +167,6 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
          xLen     := iif( xLen == NIL, 0, Val( xLen ) )
          xSubType := iif( xSubType == NIL, 1, Val( xSubType ) )
          
-         //AAdd( aLocalPrecision, { cFldName, xPrec, xLen } )
          AAdd( aLocalPrecision, { cFldName, xPrec, xLen, xSubType } )
          
       ENDDO
@@ -196,6 +194,25 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    aWAData[ AREA_CACHE ]       := {}
    aWAData[ AREA_QUERY ]       := qry
    aWAData[ AREA_FETCHED_EOF ] := .F.
+
+   // 4.1 Auto-Discovery da Chave Primária via tabelas de sistema do Firebird
+   IF Empty( aWAData[ AREA_PK ] )
+      qryPk := FBQuery( db, "SELECT TRIM(B.RDB$FIELD_NAME) FROM RDB$RELATION_CONSTRAINTS A " + ;
+                            "JOIN RDB$INDEX_SEGMENTS B ON A.RDB$INDEX_NAME = B.RDB$INDEX_NAME " + ;
+                            "WHERE A.RDB$CONSTRAINT_TYPE = 'PRIMARY KEY' " + ;
+                            "AND TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "' " + ;
+                            "ORDER BY B.RDB$FIELD_POSITION", dialect )
+
+      IF HB_ISARRAY( qryPk )
+         WHILE FBFetch( qryPk ) == 0
+            cPkField := FBGetData( qryPk, 1 )
+            IF cPkField != NIL
+               AAdd( aWAData[ AREA_PK ], Upper( AllTrim( cPkField ) ) )
+            ENDIF
+         ENDDO
+         FBFree( qryPk )
+      ENDIF
+   ENDIF
 
    nCols := qry[ 4 ]
    aStru := qry[ 6 ]
