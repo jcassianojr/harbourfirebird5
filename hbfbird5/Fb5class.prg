@@ -37,14 +37,15 @@ CREATE CLASS Fb5class
    VAR lError
    VAR dialect
    VAR charset
+   VAR oLastError // Objeto com "Code", "Message", "SQL", "Context"
 
    METHOD New( cServer, cUser, cPassword, nDialect, cCharSet )
-   METHOD Destroy()  INLINE FBClose( ::db )
-   METHOD Close()    INLINE FBClose( ::db )
 
    METHOD TableExists( cTable )
    METHOD ListTables()
    METHOD TableStruct( cTable )
+   METHOD Close() 
+   METHOD Destroy() 
 
    METHOD StartTransaction()
    METHOD Commit()
@@ -58,7 +59,7 @@ CREATE CLASS Fb5class
    METHOD Append( oRow )
    METHOD   GetServerInfo()
 
-
+   METHOD SetError( nCode, cContext, cQuery )
    METHOD NetErr()   INLINE ::lError
    METHOD Error()    INLINE FBError( ::nError )
    METHOD ErrorNo()  INLINE ::nError
@@ -85,9 +86,28 @@ METHOD New( cServer, cUser, cPassword, nDialect, cCharSet ) CLASS Fb5class
 
    RETURN Self
 
-METHOD StartTransaction() CLASS Fb5class
+METHOD SetError( nCode, cContext, cQuery ) CLASS Fb5class
+   ::lError := .T.
+   ::nError := nCode
+   
+   ::oLastError := {=>}
+   ::oLastError["Code"]    := nCode
+   ::oLastError["Message"] := FBError( nCode )
+   ::oLastError["SQL"]     := iif( cQuery == NIL, "", cQuery )
+   ::oLastError["Context"] := cContext
+   
+   RETURN .F.
 
+METHOD StartTransaction() CLASS Fb5class
    LOCAL result := .F.
+
+   // Impede o início se já houver transação ativa
+   IF ::StartedTrans
+      ::lError := .T.
+      ::nError := -1 // Ou um código de erro interno customizado
+      // Aqui pode-se opcionalmente alimentar o novo objeto de erro (Fase 3)
+      RETURN .F.
+   ENDIF
 
    ::trans := FBStartTransaction( ::db )
 
@@ -101,7 +121,26 @@ METHOD StartTransaction() CLASS Fb5class
       ::StartedTrans := .T.
    ENDIF
 
-   RETURN result
+   RETURN result   
+   
+METHOD Close() CLASS Fb5class
+   IF ::StartedTrans
+      ::Rollback() // Política documentada: rollback automático ao destruir sem comitar
+   ENDIF
+
+   IF !Empty( ::db )
+      FBClose( ::db )
+   ENDIF
+
+   ::trans := NIL
+   ::db := NIL
+   ::StartedTrans := .F.
+
+   RETURN NIL
+
+METHOD Destroy() CLASS Fb5class
+   ::Close()
+   RETURN NIL   
 
 METHOD Rollback() CLASS Fb5class
 
@@ -110,8 +149,9 @@ METHOD Rollback() CLASS Fb5class
 
    IF ::StartedTrans
       IF ( n := FBRollback( ::trans ) ) < 0
-         ::lError := .T.
-         ::nError := n
+        // ::lError := .T.
+        // ::nError := n
+        RETURN ::SetError( n, "Rollback()", NIL ) // <-- ATUALIZADO
       ELSE
          ::lError := .F.
          ::nError := 0
@@ -129,8 +169,9 @@ METHOD Commit() CLASS Fb5class
 
    IF ::StartedTrans
       IF ( n := FBCommit( ::trans ) ) < 0
-         ::lError := .T.
-         ::nError := n
+         //::lError := .T.
+         //::nError := n
+         RETURN ::SetError( n, "Commit()", NIL ) // <-- ATUALIZADO
       ELSE
          ::lError := .F.
          ::nError := 0
@@ -146,7 +187,7 @@ METHOD Execute( cQuery ) CLASS Fb5class
    LOCAL result
    LOCAL n
 
-   cQuery := RemoveSpaces( cQuery )
+   //cQuery := RemoveSpaces( cQuery )
 
    IF ::StartedTrans
       n := FBExecute( ::db, cQuery, ::dialect, ::trans )
@@ -155,9 +196,10 @@ METHOD Execute( cQuery ) CLASS Fb5class
    ENDIF
 
    IF n < 0
-      ::lError := .T.
-      ::nError := n
-      result := .F.
+      //::lError := .T.
+      //::nError := n
+      //result := .F.
+      RETURN ::SetError( n, "Execute()", cQuery )
    ELSE
       ::lError := .F.
       ::nError := 0
@@ -445,6 +487,7 @@ CREATE CLASS TFBQuery
    VAR      query
    VAR      aKeys
    VAR      aTables
+   VAR      oLastError // <-- ADICIONAR
 
    METHOD   New( nDB, cQuery, nDialect )
    METHOD   Destroy()
@@ -476,13 +519,15 @@ CREATE CLASS TFBQuery
    METHOD   GetBlankRow()
    METHOD   Blank()            INLINE ::GetBlankRow()
    METHOD   GetKeyField()
+   METHOD   SetError( nCode, cContext, cQuery ) // <-- ADICIONAR
   
 ENDCLASS
 
 METHOD New( nDB, cQuery, nDialect ) CLASS TFBQuery
 
    ::db := nDb
-   ::query := RemoveSpaces( cQuery )
+//   ::query := RemoveSpaces( cQuery )
+   ::query := cQuery
    ::dialect := nDialect
    ::closed := .T.
    ::aKeys := NIL
@@ -503,6 +548,18 @@ METHOD LastRec() CLASS TFBQuery
       oQCount:Destroy()
    ENDIF
    RETURN nTotal
+   
+METHOD SetError( nCode, cContext, cQuery ) CLASS TFBQuery
+   ::lError := .T.
+   ::nError := nCode
+   
+   ::oLastError := {=>}
+   ::oLastError["Code"]    := nCode
+   ::oLastError["Message"] := FBError( nCode )
+   ::oLastError["SQL"]     := iif( cQuery == NIL, "", cQuery )
+   ::oLastError["Context"] := cContext
+   
+   RETURN .F.   
 
 METHOD Refresh() CLASS TFBQuery
 
@@ -542,8 +599,9 @@ METHOD Refresh() CLASS TFBQuery
       ::aTables := aTable
 
    ELSE
-      ::lError := .T.
-      ::nError := qry
+      ::SetError( qry, "TFBQuery:Refresh()", ::query )
+      //::lError := .T.
+      //::nError := qry
    ENDIF
 
    RETURN result
