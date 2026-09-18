@@ -6,6 +6,30 @@
 #include "hbclass.ch"
 #include "firebird5.ch"
 
+#include "hbclass.ch"
+#include "firebird5.ch"
+
+// Controle de Lazy Loading por Thread (Semelhante ao TPostgres)
+THREAD STATIC t_lLoadMemos := .T.
+THREAD STATIC t_lLoadBlobs := .T.
+
+FUNCTION FBClass_SetLoadBlobs( lLoad )
+   LOCAL lOld := t_lLoadBlobs
+   IF HB_ISLOGICAL( lLoad )
+      t_lLoadBlobs := lLoad
+   ENDIF
+   RETURN lOld
+
+FUNCTION FBClass_SetLoadMemos( lLoad )
+   LOCAL lOld := t_lLoadMemos
+   IF HB_ISLOGICAL( lLoad )
+      t_lLoadMemos := lLoad
+   ENDIF
+   RETURN lOld
+
+// --- Restante do código original ---
+// CREATE CLASS Fb5class ...
+
 /* Macros oficiais do Firebird 5 / InterBase para tipos SQL e Dialetos */
 //#define IB_SQL_TEXT                           452
 //#define IB_SQL_VARYING                        448
@@ -715,11 +739,19 @@ METHOD FieldGet( nField ) CLASS TFBQuery
 
       IF cType == "M" .OR. cType == "G"
          IF result != NIL
-            aBlob := FBGetBlob( ::db, result )
-            result := ""
-            FOR i := 1 TO Len( aBlob )
-               result += aBlob[ i ]
-            NEXT
+            // --- BARREIRA DE LAZY LOADING ---
+            IF cType == "M" .AND. ! t_lLoadMemos
+               result := "<MEMO>"
+            ELSEIF cType == "G" .AND. ! t_lLoadBlobs
+               result := "<IMAGEM/BLOB>"
+            ELSE
+               // Carrega os dados reais do banco
+               aBlob := FBGetBlob( ::db, result )
+               result := ""
+               FOR i := 1 TO Len( aBlob )
+                  result += aBlob[ i ]
+               NEXT
+            ENDIF
          ELSE
             result := ""
          ENDIF
@@ -732,7 +764,6 @@ METHOD FieldGet( nField ) CLASS TFBQuery
          ENDIF
 
       ELSEIF cType == "D"
-         // --- CONVERSOR INTELIGENTE: Data/Hora ---[cite: 20]
          IF result != NIL
             result := StrDateClass( result )
          ELSE
@@ -740,7 +771,6 @@ METHOD FieldGet( nField ) CLASS TFBQuery
          ENDIF
 
       ELSEIF cType == "L"
-         // --- CONVERSOR INTELIGENTE: Lógico ---[cite: 20]
          IF result != NIL
             result := strlogicClasse( result, .F. )
          ELSE
@@ -870,9 +900,19 @@ METHOD FieldGet( nField ) CLASS TFBRow
 
 METHOD FieldPut( nField, Value ) CLASS TFBRow
 
-   LOCAL result
+   LOCAL result, cType
 
    IF nField >= 1 .AND. nField <= Len( ::aRow )
+      cType := ::FieldType( nField )
+      
+      // Proteção de Lazy Loading: Impede que rótulos temporários substituam os dados reais
+      IF cType == "G" .AND. ( ( ValType( Value ) == "C" .AND. Value == "<IMAGEM/BLOB>" ) .OR. !t_lLoadBlobs )
+         RETURN Value
+      ENDIF
+      IF cType == "M" .AND. ( ( ValType( Value ) == "C" .AND. Value == "<MEMO>" ) .OR. !t_lLoadMemos )
+         RETURN Value
+      ENDIF
+
       ::aChanged[ nField ] := .T.
       result := ::aRow[ nField ] := Value
    ENDIF
@@ -1309,3 +1349,45 @@ LOCAL dRet := CToD( "" )
       ENDIF
    ENDIF
 RETURN dRet
+
+// +--------------------------------------------------------------------
+// +    Funções de Apoio para Leitura e Gravação Sob Demanda (Fb5Class)
+// +--------------------------------------------------------------------
+
+FUNCTION FBClass_PegarMemo( oObj, cCampo )
+   LOCAL cTxt, lAnt := t_lLoadMemos
+   FBClass_SetLoadMemos( .T. )
+   cTxt := oObj:FieldGet( oObj:FieldPos( cCampo ) )
+   FBClass_SetLoadMemos( lAnt )
+   RETURN iif( Empty( cTxt ) .OR. cTxt == "<MEMO>", "", cTxt )
+
+FUNCTION FBClass_GravarMemo( oRow, cCampo, cTxt )
+   LOCAL lAnt := t_lLoadMemos
+   IF ValType( cTxt ) != "C"; RETURN .F.; ENDIF
+   
+   FBClass_SetLoadMemos( .T. )
+   oRow:FieldPut( oRow:FieldPos( cCampo ), cTxt )
+   FBClass_SetLoadMemos( lAnt )
+   RETURN .T. 
+
+FUNCTION FBClass_PegarBlobJpg( oObj, cCampo, cDir )
+   LOCAL cBin, lAnt := t_lLoadBlobs
+   FBClass_SetLoadBlobs( .T. )
+   cBin := oObj:FieldGet( oObj:FieldPos( cCampo ) )
+   FBClass_SetLoadBlobs( lAnt )
+   
+   IF Empty( cBin ) .OR. cBin == "<IMAGEM/BLOB>"
+      RETURN .F.
+   ENDIF
+   RETURN hb_memowrit( cDir, cBin )
+   
+FUNCTION FBClass_GravarBlobJpg( oRow, cCampo, cDir )
+   LOCAL cBin, lAnt := t_lLoadBlobs
+   IF !hb_FileExists( cDir ); RETURN .F.; ENDIF
+   
+   cBin := hb_memoread( cDir )
+   
+   FBClass_SetLoadBlobs( .T. )
+   oRow:FieldPut( oRow:FieldPos( cCampo ), cBin )
+   FBClass_SetLoadBlobs( lAnt )
+   RETURN .T.
