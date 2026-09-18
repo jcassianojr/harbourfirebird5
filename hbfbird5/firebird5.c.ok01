@@ -388,17 +388,6 @@ HB_FUNC( FBQUERY )
 
       if( isc_dsql_execute( status, &trans, &stmt, dialect, ( sqlda->sqld ? sqlda : NULL ) ) )
       {
-         /* Correção do Memory Leak: Liberta buffers alocados antes de falhar */
-         for( i = 0; i < sqlda->sqld; i++ )
-         {
-            if( sqlda->sqlvar[ i ].sqldata )
-               hb_xfree( sqlda->sqlvar[ i ].sqldata );
-            if( sqlda->sqlvar[ i ].sqlind )
-               hb_xfree( sqlda->sqlvar[ i ].sqlind );
-         }
-         hb_xfree( sqlda );
-         isc_dsql_free_statement( status, &stmt, DSQL_drop ); /* Liberta a própria statement na DB */
-
          hb_itemRelease( aNew );
          hb_retnl( isc_sqlcode( status ) );
          return;
@@ -542,19 +531,24 @@ HB_FUNC( FBGETDATA )
 
           case SQL_VARYING:
             {
+               // Utilizamos a struct nativa VARY (já declarada no topo) para garantir 
+               // o alinhamento exato de memória sem adivinhar ponteiros.
                VARY * vary = ( VARY * ) var->sqldata;
                int vlen = vary->vary_length;
 
+               // Trava de segurança: se o tamanho for inválido, retorna vazio
                if ( vlen <= 0 || vlen > var->sqllen )
                {
                   hb_retc( "" );
                   break;
                }
 
+               // Aloca e copia EXATAMENTE o tamanho informado pelo SGBD
                char * temp_str = ( char * ) hb_xgrab( vlen + 1 );
                memcpy( temp_str, vary->vary_string, vlen );
                temp_str[ vlen ] = '\0';
 
+               // Limpeza final de espaços ou quebras (garantia de metadado limpo)
                while( vlen > 0 && ( temp_str[ vlen - 1 ] == ' ' || temp_str[ vlen - 1 ] == '\0' || temp_str[ vlen - 1 ] == '\r' || temp_str[ vlen - 1 ] == '\n' ) )
                {
                   vlen--;
@@ -603,6 +597,7 @@ HB_FUNC( FBGETDATA )
             case SQL_QUAD:
             {
                ISC_QUAD * blob_id = ( ISC_QUAD * ) var->sqldata;
+               // Exporta o ID binário do Blob como string constante em vez de ponteiro solto
                hb_retclen( ( const char * ) blob_id, sizeof( ISC_QUAD ) );
                break;
             }
@@ -671,6 +666,7 @@ HB_FUNC( FBGETDATA )
                else
                   hb_snprintf( data, sizeof( data ), "%*" ISC_INT64_FORMAT "d", field_width, ( ISC_INT64 ) value );
 
+               // TRATAMENTO EXTRA PARA NUMÉRICOS CONVERTIDOS EM STRING: Remove espaços à esquerda gerados pelo formatador
                {
                   char * p = data;
                   while( *p == ' ' ) p++;
@@ -711,6 +707,7 @@ HB_FUNC( FBGETBLOB )
       ISC_QUAD   blob_id;
       ISC_STATUS blob_stat;
 
+      // Valida e copia a string binária de 8 bytes recebida do Harbour
       if ( hb_parclen( 2 ) == sizeof( ISC_QUAD ) )
          memcpy( &blob_id, hb_parcx( 2 ), sizeof( ISC_QUAD ) );
       else
@@ -730,6 +727,7 @@ HB_FUNC( FBGETBLOB )
          }
       }
 
+      // CORREÇÃO CRÍTICA: blob_id passado por referência (&blob_id)
       if( isc_open_blob2( status, &db, &trans, &blob_handle, &blob_id, 0, NULL ) )
       {
          hb_retnl( isc_sqlcode( status ) );
@@ -815,3 +813,4 @@ HB_FUNC( FBROLLBACKTRANSACTION )
    else
       hb_errRT_BASE( EG_ARG, 2020, NULL, HB_ERR_FUNCNAME, HB_ERR_ARGS_BASEPARAMS );
 }
+
