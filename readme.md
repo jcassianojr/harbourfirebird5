@@ -1,60 +1,97 @@
-﻿# Firebird 5 RDD for Harbour
+# Firebird 5 RDD for Harbour
 
-Uma implementação nativa de **RDD (Replaceable Database Driver)** e camada de classes orientada a objetos para o Harbour, permitindo interagir com o **Firebird 5** usando tanto sintaxe SQL direta quanto comandos tradicionais xBase (`dbAppend`, `dbSkip`, `dbGoTop`, etc.).
+Uma implementação nativa de RDD (Replaceable Database Driver) e de uma camada orientada a objetos para o Harbour, permitindo integrar aplicações xBase/Harbour com o Firebird 5 usando duas abordagens:
 
----
+- SQL direto por meio da classe `Fb5class`
+- Navegação e manipulação em estilo xBase via `FB5RDD`
 
-## 🚀 Características
-
-* **Arquitetura Cliente/Servidor Robusta:** Conexão direta com o motor do Firebird via C-API de baixo nível otimizada.
-
-
-* **Dual Interface:**
-* Camada orientada a objetos (`Fb5class` / `TFBQuery`) para manipulação via comandos SQL puros.
-
-
-* Camada RDD (`FB5RDD`) para navegação e manipulação estilo DBF através de áreas de trabalho (*WorkAreas*).
-
-
-
-
-* **Suporte Multi-arquitetura:** Compatível com ambientes de 32-bits e 64-bits.
-
-
-* **Camada de Cache Inteligente:** Minimiza idas e vindas ao SGBD durante a navegação por registros através de um buffer local gerenciado pela RDD.
-
-
+O objetivo do projeto é oferecer acesso ao Firebird de forma simples, compatível com o ecossistema Harbour e com a conveniência de uso de bancos relacionais modernos.
 
 ---
 
-## 📦 Estrutura dos Arquivos
+## Visão geral
 
-O projeto é composto por três componentes principais:
+Este projeto expõe uma ponte entre o Harbour e a API nativa do Firebird 5. Ele combina:
 
-1. **`Fb5class.prg`**: Classes de conexão, execução de transações, controle de metadados e consultas (*Query* e *Row*).
+- camada de conexão e execução SQL
+- suporte a consultas e leitura de registros
+- driver RDD para uso com arquivos/áreas de trabalho em sintaxe tradicional
+- integração com ferramentas de compilação Harbour (`hbmk2`)
 
-
-2. **`FB5RDD.prg`**: Implementação das funções de RDD do USRRDD para compatibilidade xBase.
-
-
-3. **`firebird5.c`**: Wrapper de baixo nível em C que faz a ponte entre a C-API do Firebird e o ecossistema do Harbour.
-
-
+A implementação atual está organizada em módulos principais dentro da pasta `hbfbird5`, com suporte adicional a ferramentas e exemplos de uso.
 
 ---
 
-## 🛠️ Compilação
+## Principais recursos
 
-Para compilar o seu projeto utilizando o utilitário `hbmk2`, certifique-se de incluir os caminhos de *include* da API do Firebird e de linkar as dependências corretas.
+- Conexão direta com Firebird 5 via API nativa
+- Suporte a operações SQL com classes de acesso
+- Compatibilidade com uso de comandos xBase tradicionais (`dbAppend`, `dbSkip`, `dbGoTop`, etc.)
+- Estrutura compatível com desenvolvimento em Harbour
+- Suporte para build em arquiteturas 32-bit e 64-bit via MinGW
+- Integração com a biblioteca Firebird (`fbclient`, cabeçalhos `ibase.h`)
 
-Exemplo de arquivo de projeto (`hbfirebird.hbp`):
+---
+
+## Estrutura do repositório
+
+```text
+.
+├── README.md                     # documentação principal
+├── hbfbird5/                    # código principal do driver e classes
+│   ├── Fb5class.prg             # classes para acesso SQL e conexão
+│   ├── FB5RDD.prg               # driver RDD em estilo xBase
+│   ├── firebird5.c              # wrapper em C para a API do Firebird
+│   ├── firebird5.ch             # cabeçalhos/chamadas de constantes
+│   ├── hbfbird5.hbp             # projeto de build para Harbour
+│   ├── compmingw32.bat          # build para 32 bits
+│   ├── compmingw64.bat          # build para 64 bits
+│   ├── teste/                   # scripts de teste
+│   └── doc/                     # documentação complementar
+├── sddfb5/                      # outra implementação/estrutura relacionada
+├── dbtest/                      # banco de teste / arquivos de exemplo
+├── .gitignore
+├── .gitattributes
+└── ...
+```
+
+---
+
+## Requisitos
+
+Antes de compilar e executar o projeto, certifique-se de ter instalado:
+
+- Harbour 3.2+ ou superior
+- Compilador MinGW (32-bit ou 64-bit)
+- Firebird 5 com SDK/cabeçalhos instalados
+- Biblioteca cliente `fbclient` disponível no PATH ou em diretório configurado
+- `hbmk2` no ambiente de build
+
+Além disso, os cabeçalhos da API do Firebird devem estar acessíveis, e o arquivo `ibase.h` deve ser encontrado durante a compilação.
+
+---
+
+## Compilação
+
+O projeto inclui scripts de build para Windows com MinGW. A configuração principal pode ser ajustada no arquivo `hbfbird5/compmingw64.bat`.
+
+Exemplo de uso:
+
+```bat
+cd hbfbird5
+set HB_WITH_FIREBIRD=C:\harbour\hb3rd\firebird-x64\include\
+call d:\devprg\hb64\hb64msys.bat
+call c:\devprg\hb64\hb64msys_c.bat
+hbmk2.exe hbfbird5.hbp
+```
+
+Também é possível compilar usando um arquivo `.hbp` próprio, por exemplo:
 
 ```text
 -hblib
 -olib/${hb_plat}/${hb_comp}/${hb_name}
 -w3 -es2
 
-# Caminho para os arquivos de cabeçalho (.h) do Firebird
 -Ic:/harbour/hb3rd/firebird/include/
 
 firebird5.c
@@ -62,22 +99,22 @@ FB5RDD.prg
 Fb5class.prg
 
 $hb_pkg_install.hbm
-
 ```
+
+> Ajuste os caminhos conforme a instalação do Harbour e do Firebird no seu ambiente.
 
 ---
 
-## 📖 Exemplos de Uso
+## Exemplos de uso
 
-### 1. Utilizando via Classe (`Fb5class`)
+### 1) Acesso via classe `Fb5class`
 
 ```harbour
 PROCEDURE Main()
    LOCAL oDB, oQry
 
-   // Conecta ao servidor Firebird
    oDB := Fb5class():New( "localhost:c:/dados/banco.fdb", "SYSDBA", "masterkey" )
-   
+
    IF oDB:NetErr()
       ? "Erro:", oDB:Error()
       RETURN
@@ -85,15 +122,11 @@ PROCEDURE Main()
 
    oDB:StartTransaction()
 
-   // Criação de Tabela
    oDB:Execute( "CREATE TABLE clientes (id INTEGER NOT NULL PRIMARY KEY, nome VARCHAR(100), limite NUMERIC(15,2))" )
-
-   // Inserção
    oDB:Execute( "INSERT INTO clientes VALUES (1, 'Maria Silva', 3500.00)" )
 
    oDB:Commit()
 
-   // Consulta (Query)
    oQry := oDB:Query( "SELECT * FROM clientes" )
    DO WHILE oQry:Fetch()
       ? oQry:FieldGet( 1 ), oQry:FieldGet( 2 ), oQry:FieldGet( 3 )
@@ -102,10 +135,9 @@ PROCEDURE Main()
 
    oDB:Close()
 RETURN
-
 ```
 
-### 2. Utilizando via RDD Tradicional (`FB5RDD`)
+### 2) Acesso via RDD tradicional (`FB5RDD`)
 
 ```harbour
 REQUEST FB5RDD
@@ -113,30 +145,23 @@ REQUEST FB5RDD
 PROCEDURE Main()
    LOCAL nConn, aStru
 
-   // Inicia a conexão com o Firebird
    nConn := DBFB5CONNECTION( "localhost:c:/dados/banco.fdb", "SYSDBA", "masterkey" )
 
-   // Define a estrutura da tabela virtual
    aStru := { ;
       { "ID",     "N",  9, 0 }, ;
       { "NOME",   "C", 50, 0 }, ;
       { "LIMITE", "N", 15, 2 }  ;
    }
 
-   // Cria e abre a tabela utilizando a RDD do Firebird
    dbCreate( "clientes", aStru, "FB5RDD", .T., "CLI" )
-
-   // Configura a chave primária para permitir updates/deletes automáticos[cite: 2]
    FB5_SETPK( "CLI", "ID" )
 
-   // Inserção estilo xBase
    CLI->( dbAppend() )
    CLI->ID     := 1
    CLI->NOME   := "João Pereira"
    CLI->LIMITE := 4200.00
    CLI->( dbCommit() )
 
-   // Navegação
    CLI->( dbGoTop() )
    DO WHILE !CLI->( EOF() )
       ? CLI->ID, CLI->NOME, CLI->LIMITE
@@ -146,15 +171,36 @@ PROCEDURE Main()
    CLOSE ALL
    DBFB5CLEARCONNECTION( nConn )
 RETURN
-
 ```
 
 ---
 
-## ⚙️ Requisitos
+## Dicas de uso
 
-* **Harbour 3.2+** (ou superior)
-* Compilador **MinGW** (32-bits ou 64-bits)
+- Para projetos novos, prefira a abordagem SQL com `Fb5class` quando a lógica for mais orientada a consultas e manipulação de dados.
+- Para aplicações legadas ou em estilo xBase, o driver `FB5RDD` facilita a migração e a manutenção do código.
+- Ajuste sempre os caminhos do Firebird e do Harbour de acordo com a instalação local.
+- Verifique se a biblioteca `fbclient.dll` está disponível no ambiente de execução do programa.
 
+---
 
-* **Firebird 5** (Servidor instalado e arquivos de cabeçalho `ibase.h`)
+## Documentação complementar
+
+Há documentação adicional sobre uso do Firebird embutido e referências úteis dentro da pasta `hbfbird5/doc/`.
+
+Consulte também:
+
+- `hbfbird5/doc/firebird5_embedded.md`
+- arquivos de teste em `hbfbird5/teste/`
+
+---
+
+## Licença
+
+Este projeto é mantido em ambiente de desenvolvimento Harbour/Firebird. Verifique o repositório para detalhes específicos de licenciamento caso seja necessário distribuir a biblioteca ou binários em produção.
+
+---
+
+## Contribuição
+
+Sinta-se à vontade para abrir issues, propor melhorias e enviar ajustes para o projeto. O repositório está voltado para a evolução de acesso nativo ao Firebird no ecossistema Harbour.
