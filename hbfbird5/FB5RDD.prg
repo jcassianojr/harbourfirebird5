@@ -341,9 +341,11 @@ STATIC FUNCTION FB5_FETCH_NEXT( nWA )
                // --- CONVERSOR INTELIGENTE: Lógico ---[cite: 15]
                xVal := strlogicrdd( xVal, .F. )
                
-            ELSEIF cType == HB_FT_DATE .OR. cType == HB_FT_TIMESTAMP
-               // --- CONVERSOR INTELIGENTE: Data/Hora ---[cite: 15]
+            ELSEIF cType == HB_FT_DATE
                xVal := StrDateRdd( xVal )
+               
+            ELSEIF cType == HB_FT_TIMESTAMP
+               xVal := UniversalDateTime( xVal ) // <-- INJEÇÃO: Conversor Universal de Data e Hora
                
             ELSEIF cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER
                xVal := Val( xVal )
@@ -463,6 +465,7 @@ STATIC FUNCTION FB5_GOBOTTOM( nWA )
    RETURN FB5_GOTO( nWA, Len( aWAData[ AREA_CACHE ] ) )
 
 STATIC FUNCTION FB5_GOTOID( nWA, nRecord ); RETURN FB5_GOTO( nWA, nRecord )
+
 
 STATIC FUNCTION FB5_GOTO( nWA, nRecord )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
@@ -800,8 +803,11 @@ STATIC FUNCTION FB5_HydrateRow( nWA, nRecNo )
             ELSE
                IF cType == HB_FT_LOGICAL
                   xVal := strlogicrdd( xVal, .F. )
-               ELSEIF cType == HB_FT_DATE .OR. cType == HB_FT_TIMESTAMP
+              ELSEIF cType == HB_FT_DATE
                   xVal := StrDateRdd( xVal )
+               ELSEIF cType == HB_FT_TIMESTAMP
+                  xVal := UniversalDateTime( xVal ) // <-- INJEÇÃO: Conversor Universal de Data e Hora
+                  
                ELSEIF cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER
                   xVal := Val( xVal )
                ELSEIF cType == HB_FT_MEMO .OR. cType == HB_FT_OLE
@@ -1079,3 +1085,67 @@ LOCAL dRet := CToD( "" )
    ENDIF
 RETURN dRet
 
+
+ // +--------------------------------------------------------------------
+// +  Função: UniversalDateTime
+// +  Objetivo: Tratar datas complexas mantendo e corrigindo o horário
+// +  Retorna: Timestamp nativo (T) de alta precisão
+// +--------------------------------------------------------------------
+STATIC FUNCTION UniversalDateTime( xData )
+
+   LOCAL cStr, cDataLimpa, aParts, i, dData
+   LOCAL cTime := "00:00:00"
+   LOCAL nHour := 0, nMin := 0, nSec := 0
+
+   // 1. Já é Data ou Timestamp? Trata a conversão direta
+   IF ValType( xData ) == "T"
+      RETURN xData
+   ELSEIF ValType( xData ) == "D"
+      RETURN hb_DateTime( Year(xData), Month(xData), Day(xData) )
+   ENDIF
+
+   // 2. Barreira para nulos ou variáveis não suportadas
+   IF ValType( xData ) <> "C" .OR. Empty( xData )
+      RETURN hb_DateTime( 0, 0, 0 )
+   ENDIF
+
+   // 3. Limpa espaços e conserta erros como ";" ou tags ISO "T"
+   cStr := AllTrim( xData )
+   cStr := StrTran( cStr, ";", ":" )
+   cStr := StrTran( cStr, "T", " " )
+
+   aParts := hb_ATokens( cStr, " " )
+   cDataLimpa := ""
+
+   // 4. Caçador de Horários
+   FOR i := 1 TO Len( aParts )
+      IF ":" $ aParts[i] .AND. Val( StrTran( aParts[i], ":", "" ) ) >= 0
+         cTime := aParts[i] // Isola apenas a hora encontrada
+      ELSE
+         cDataLimpa += aParts[i] + " " // Reconstrói string base só da data
+      ENDIF
+   NEXT
+
+   cDataLimpa := AllTrim( cDataLimpa )
+   
+   // 5. Utiliza o motor otimizado para extrair o calendário válido
+   dData := StrDaterdd( cDataLimpa )
+
+   // Fallback se a rotina retornar vazio, checa direto via Harbour CToD
+   IF Empty( dData ) .AND. !Empty( CToD( cDataLimpa ) )
+      dData := CToD( cDataLimpa )
+   ENDIF
+
+   IF Empty( dData )
+      RETURN hb_DateTime( 0, 0, 0 )
+   ENDIF
+
+   // 6. Separa e converte as partes do Horário
+   aParts := hb_ATokens( cTime, ":" )
+   IF Len( aParts ) >= 1; nHour := Val( aParts[1] ); ENDIF
+   IF Len( aParts ) >= 2; nMin  := Val( aParts[2] ); ENDIF
+   IF Len( aParts ) >= 3; nSec  := Val( aParts[3] ); ENDIF
+
+   // 7. Retorna o Objeto Timestamp Oficial
+   RETURN hb_DateTime( Year( dData ), Month( dData ), Day( dData ), nHour, nMin, nSec ) 
+   
