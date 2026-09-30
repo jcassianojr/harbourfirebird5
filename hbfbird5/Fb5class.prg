@@ -6,8 +6,6 @@
 #include "hbclass.ch"
 #include "firebird5.ch"
 
-#include "hbclass.ch"
-#include "firebird5.ch"
 
 // Controle de Lazy Loading por Thread (Semelhante ao TPostgres)
 THREAD STATIC t_lLoadMemos := .T.
@@ -351,9 +349,9 @@ METHOD TableStruct( cTable ) CLASS Fb5class
                nSize := 15
                EXIT
             CASE 35 // TIMESTAMP
-               cType := "D"
-               nSize := 8
-               EXIT
+                cType := "T" // <-- Alterado de "D" para "T" para manter consistência com o Wrapper e StructConvert                
+                nSize := 20
+                EXIT
             CASE 37 // VARCHAR
             CASE 40
                cType := "C"
@@ -568,6 +566,7 @@ METHOD LastRec() CLASS TFBQuery
    // ou executar um COUNT rápido na mesma string de SQL.
    // Para manter simples e compatível com sua lógica:
    LOCAL oQCount := TFBQuery():New( ::db, "SELECT COUNT(*) FROM (" + ::query + ")", ::dialect )
+   
    IF oQCount != NIL
       nTotal := Val( oQCount:FieldGet( 1 ) )
       oQCount:Destroy()

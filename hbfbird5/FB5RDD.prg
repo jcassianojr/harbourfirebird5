@@ -45,7 +45,8 @@ FUNCTION DBFB5CONNECTION( cServer, cUser, cPassword, nDialect, cCharSet )
    hb_default( @cCharSet, "UTF8" ) // Pode deixar aqui para uso futuro
 
    // CORREÇÃO: Removido o cCharSet da chamada até que o firebird5.c seja atualizado
-   db := FBConnect( cServer, cUser, cPassword )
+ //  db := FBConnect( cServer, cUser, cPassword )
+   db := FBConnect( cServer, cUser, cPassword, cCharSet )
    
    IF HB_ISNUMERIC( db )
       Alert( "Erro ao conectar Firebird via RDD (Cód): " + hb_ntos( db ) )
