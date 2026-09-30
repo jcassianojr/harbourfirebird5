@@ -86,6 +86,7 @@ CREATE CLASS Fb5class
    METHOD NetErr()   INLINE ::lError
    METHOD Error()    INLINE FBError( ::nError )
    METHOD ErrorNo()  INLINE ::nError
+   METHOD ValToSql( xField, cType ) INLINE DataToSql( xField, cType )
 
 ENDCLASS
 
