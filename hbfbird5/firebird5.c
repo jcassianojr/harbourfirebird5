@@ -12,6 +12,7 @@
 #include "hbapi.h"
 #include "hbapierr.h"
 #include "hbapiitm.h"
+#include "hbdate.h"
 
 #include "ibase.h"
 
@@ -363,6 +364,15 @@ HB_FUNC( FBQUERY )
             case SQL_INT64:
                var->sqldata = ( char * ) hb_xgrab( sizeof( ISC_INT64 ) );
                break;
+            case SQL_TIMESTAMP:
+               var->sqldata = ( char * ) hb_xgrab( sizeof( ISC_TIMESTAMP ) );
+               break;
+            case SQL_TYPE_DATE:
+               var->sqldata = ( char * ) hb_xgrab( sizeof( ISC_DATE ) );
+               break;
+            case SQL_TYPE_TIME:
+               var->sqldata = ( char * ) hb_xgrab( sizeof( ISC_TIME ) );
+               break;
             default:
                var->sqldata = ( char * ) hb_xgrab( sizeof( char ) * var->sqllen );
                break;
@@ -388,7 +398,6 @@ HB_FUNC( FBQUERY )
 
       if( isc_dsql_execute( status, &trans, &stmt, dialect, ( sqlda->sqld ? sqlda : NULL ) ) )
       {
-         /* Correção do Memory Leak: Liberta buffers alocados antes de falhar */
          for( i = 0; i < sqlda->sqld; i++ )
          {
             if( sqlda->sqlvar[ i ].sqldata )
@@ -397,7 +406,7 @@ HB_FUNC( FBQUERY )
                hb_xfree( sqlda->sqlvar[ i ].sqlind );
          }
          hb_xfree( sqlda );
-         isc_dsql_free_statement( status, &stmt, DSQL_drop ); /* Liberta a própria statement na DB */
+         isc_dsql_free_statement( status, &stmt, DSQL_drop );
 
          hb_itemRelease( aNew );
          hb_retnl( isc_sqlcode( status ) );
@@ -508,61 +517,23 @@ HB_FUNC( FBGETDATA )
       }
       else
       {
-         struct tm times;
-         char      date_s[ 25 ];
-         char      data[ 1024 ];
-
          short dtype = var->sqltype & ~1;
 
          switch( dtype )
          {
             case SQL_TEXT:
-            {
-               int len = var->sqllen;
-               if ( len <= 0 )
-               {
-                  hb_retc( "" );
-                  break;
-               }
-
-               char * temp_str = ( char * ) hb_xgrab( len + 1 );
-               memset( temp_str, 0, len + 1 );
-               memcpy( temp_str, var->sqldata, len );
-
-               while( len > 0 && ( temp_str[ len - 1 ] == ' ' || temp_str[ len - 1 ] == '\0' || temp_str[ len - 1 ] == '\r' || temp_str[ len - 1 ] == '\n' ) )
-               {
-                  len--;
-               }
-               temp_str[ len ] = '\0';
-
-               hb_retc( temp_str );
-               hb_xfree( temp_str );
+               hb_retclen( var->sqldata, var->sqllen );
                break;
-            }
 
-          case SQL_VARYING:
+            case SQL_VARYING:
             {
                VARY * vary = ( VARY * ) var->sqldata;
                int vlen = vary->vary_length;
 
-               if ( vlen <= 0 || vlen > var->sqllen )
-               {
+               if( vlen <= 0 || vlen > var->sqllen )
                   hb_retc( "" );
-                  break;
-               }
-
-               char * temp_str = ( char * ) hb_xgrab( vlen + 1 );
-               memcpy( temp_str, vary->vary_string, vlen );
-               temp_str[ vlen ] = '\0';
-
-               while( vlen > 0 && ( temp_str[ vlen - 1 ] == ' ' || temp_str[ vlen - 1 ] == '\0' || temp_str[ vlen - 1 ] == '\r' || temp_str[ vlen - 1 ] == '\n' ) )
-               {
-                  vlen--;
-               }
-               temp_str[ vlen ] = '\0';
-
-               hb_retc( temp_str );
-               hb_xfree( temp_str );
+               else
+                  hb_retclen( vary->vary_string, vlen );
                break;
             }
 
@@ -571,33 +542,55 @@ HB_FUNC( FBGETDATA )
                break;
 
             case SQL_TIMESTAMP:
+            {
+               struct tm times;
                isc_decode_timestamp( ( ISC_TIMESTAMP * ) var->sqldata, &times );
-               hb_snprintf( date_s, sizeof( date_s ), "%04d-%02d-%02d %02d:%02d:%02d.%04d",
-                          times.tm_year + 1900,
-                          times.tm_mon + 1,
-                          times.tm_mday,
-                          times.tm_hour,
-                          times.tm_min,
-                          times.tm_sec,
-                          ( int ) ( ( ( ISC_TIMESTAMP * ) var->sqldata )->timestamp_time % 10000 ) );
-               hb_retc( date_s );
+               {
+                  long lJulian, lMilliSec;
+                  time_t rawtime;
+                  struct tm tinfo;
+                  
+                  memset( &tinfo, 0, sizeof( tinfo ) );
+                  tinfo.tm_year = times.tm_year;
+                  tinfo.tm_mon  = times.tm_mon;
+                  tinfo.tm_mday = times.tm_mday;
+                  tinfo.tm_hour = times.tm_hour;
+                  tinfo.tm_min  = times.tm_min;
+                  tinfo.tm_sec  = times.tm_sec;
+                  rawtime = mktime( &tinfo );
+                  
+                  lMilliSec = hb_timeEncode( times.tm_hour, times.tm_min, times.tm_sec, 
+                                             ( int ) ( ( ( ISC_TIMESTAMP * ) var->sqldata )->timestamp_time % 10000 ) / 10 );
+                  lJulian = ( long ) ( rawtime / 86400L ) + 2440588L;
+                  
+                  hb_rettdt( lJulian, lMilliSec );
+               }
                break;
+            }
 
             case SQL_TYPE_DATE:
+            {
+               struct tm times;
                isc_decode_sql_date( ( ISC_DATE * ) var->sqldata, &times );
-               hb_snprintf( date_s, sizeof( date_s ), "%04d-%02d-%02d", times.tm_year + 1900, times.tm_mon + 1, times.tm_mday );
-               hb_retc( date_s );
+               {
+                  char date_s[ 15 ];
+                  hb_snprintf( date_s, sizeof( date_s ), "%04d%02d%02d",
+                               times.tm_year + 1900, times.tm_mon + 1, times.tm_mday );
+                  hb_retds( date_s );
+               }
                break;
+            }
 
             case SQL_TYPE_TIME:
+            {
+               struct tm times;
                isc_decode_sql_time( ( ISC_TIME * ) var->sqldata, &times );
-               hb_snprintf( date_s, sizeof( date_s ), "%02d:%02d:%02d.%04d",
-                          times.tm_hour,
-                          times.tm_min,
-                          times.tm_sec,
-                          ( int ) ( ( *( ( ISC_TIME * ) var->sqldata ) ) % 10000 ) );
-               hb_retc( date_s );
+               {
+                  long lMilliSec = hb_timeEncode( times.tm_hour, times.tm_min, times.tm_sec, 0 );
+                  hb_rettdt( 0, lMilliSec );
+               }
                break;
+            }
 
             case SQL_BLOB:
             case SQL_QUAD:
@@ -606,86 +599,55 @@ HB_FUNC( FBGETDATA )
                hb_retclen( ( const char * ) blob_id, sizeof( ISC_QUAD ) );
                break;
             }
+
             case SQL_SHORT:
             case SQL_LONG:
             case SQL_INT64:
             {
                ISC_INT64 value;
-               short      field_width;
-               short      dscale;
 
                switch( dtype )
                {
                   case SQL_SHORT:
-                     value       = ( ISC_INT64 ) *( short * ) var->sqldata;
-                     field_width = 6;
+                     value = ( ISC_INT64 ) *( short * ) var->sqldata;
                      break;
-
                   case SQL_LONG:
-                     value       = ( ISC_INT64 ) *( long * ) var->sqldata;
-                     field_width = 11;
+                     value = ( ISC_INT64 ) *( long * ) var->sqldata;
                      break;
-
                   case SQL_INT64:
-                     value       = ( ISC_INT64 ) *( ISC_INT64 * ) var->sqldata;
-                     field_width = 21;
+                     value = ( ISC_INT64 ) *( ISC_INT64 * ) var->sqldata;
                      break;
-
                   default:
-                     value       = 0;
-                     field_width = 10;
+                     value = 0;
                      break;
                }
 
-               dscale = var->sqlscale;
-
-               if( dscale < 0 )
+               if( var->sqlscale < 0 )
+                  hb_retnd( hb_numDecConv( value, ( int ) -var->sqlscale ) );
+               else if( var->sqlscale > 0 )
                {
-                  ISC_INT64 tens = 1;
-                  short      i;
-
-                  for( i = 0; i > dscale; i-- )
-                     tens *= 10;
-
-                  if( value >= 0 )
-                     hb_snprintf( data, sizeof( data ), "%*" ISC_INT64_FORMAT "d.%0*" ISC_INT64_FORMAT "d",
-                                  field_width - 1 + dscale,
-                                  ( ISC_INT64 ) value / tens,
-                                  -dscale,
-                                  ( ISC_INT64 ) value % tens );
-                  else if( ( value / tens ) != 0 )
-                     hb_snprintf( data, sizeof( data ), "%*" ISC_INT64_FORMAT "d.%0*" ISC_INT64_FORMAT "d",
-                                  field_width - 1 + dscale,
-                                  ( ISC_INT64 ) ( value / tens ),
-                                  -dscale,
-                                  ( ISC_INT64 ) -( value % tens ) );
-                  else
-                     hb_snprintf( data, sizeof( data ), "%*s.%0*" ISC_INT64_FORMAT "d",
-                                  field_width - 1 + dscale,
-                                  "-0",
-                                  -dscale,
-                                  ( ISC_INT64 ) -( value % tens ) );
+                  ISC_INT64 factor = 1;
+                  short i;
+                  for( i = 0; i < var->sqlscale; i++ )
+                     factor *= 10;
+                  hb_retnint( value * factor );
                }
-               else if( dscale )
-                  hb_snprintf( data, sizeof( data ), "%*" ISC_INT64_FORMAT "d%0*d", field_width, ( ISC_INT64 ) value, dscale, 0 );
                else
-                  hb_snprintf( data, sizeof( data ), "%*" ISC_INT64_FORMAT "d", field_width, ( ISC_INT64 ) value );
-
                {
-                  char * p = data;
-                  while( *p == ' ' ) p++;
-                  hb_retc( p );
+                  if( dtype == SQL_INT64 )
+                     hb_retnint( value );
+                  else
+                     hb_retni( ( int ) value );
                }
                break;
             }
+
             case SQL_FLOAT:
-               hb_snprintf( data, sizeof( data ), "%15g", *( float * ) ( var->sqldata ) );
-               hb_retc( data );
+               hb_retnd( ( double ) *( float * ) var->sqldata );
                break;
 
             case SQL_DOUBLE:
-               hb_snprintf( data, sizeof( data ), "%24f", *( double * ) ( var->sqldata ) );
-               hb_retc( data );
+               hb_retnd( *( double * ) var->sqldata );
                break;
 
             default:
