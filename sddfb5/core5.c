@@ -46,7 +46,10 @@ static SDDNODE s_firebirddd = {
    ( SDDFUNC_CLOSE ) fbClose,
    ( SDDFUNC_GOTO ) fbGoTo,
    ( SDDFUNC_GETVALUE ) NULL,
-   ( SDDFUNC_GETVARLEN ) NULL
+   ( SDDFUNC_GETVARLEN ) NULL,
+   /* Correcoes estruturais necessarias para o novo SQLBASE[cite: 1, 4] */
+   SQLDD_EFLAG_NONE, 
+   ( PHB_ITEM ) NULL_MUTEX_PLACEHOLDER
 };
 
 
@@ -54,7 +57,8 @@ static void hb_firebirddd_init( void * cargo )
 {
    HB_SYMBOL_UNUSED( cargo );
 
-   if( ! hb_sddRegister( &s_firebirddd ) )
+   /* Verificacao de integridade importada do core.c original[cite: 1] */
+   if( ! hb_sddRegister( &s_firebirddd ) || ( sizeof( isc_db_handle ) != sizeof( void * ) ) )
       hb_errInternal( HB_EI_RDDINVALID, NULL, NULL, NULL );
 }
 
@@ -446,10 +450,10 @@ static HB_ERRCODE fbClose( SQLBASEAREAP pArea )
          int i;
          for( i = 0; i < pSDDData->pSqlda->sqld; i++ )
          {
-            if( pSDDData->pSqlda->sqlvar[ i ].sqldata )
-               hb_xfree( pSDDData->pSqlda->sqlvar[ i ].sqldata );
-            if( pSDDData->pSqlda->sqlvar[ i ].sqlind )
-               hb_xfree( pSDDData->pSqlda->sqlvar[ i ].sqlind );
+             if( pSDDData->pSqlda->sqlvar[ i ].sqldata )
+                hb_xfree( pSDDData->pSqlda->sqlvar[ i ].sqldata );
+             if( pSDDData->pSqlda->sqlvar[ i ].sqlind )
+                hb_xfree( pSDDData->pSqlda->sqlvar[ i ].sqlind );
          }
          hb_xfree( pSDDData->pSqlda );
       }
