@@ -350,7 +350,7 @@ METHOD TableStruct( cTable ) CLASS Fb5class
                nSize := 15
                EXIT
             CASE 35 // TIMESTAMP
-                cType := "T" // <-- Alterado de "D" para "T" para manter consist�ncia com o Wrapper e StructConvert                
+                cType := "T" // Mantem compatibilidade com o wrapper e StructConvert.
                 nSize := 20
                 EXIT
             CASE 37 // VARCHAR
@@ -397,7 +397,7 @@ METHOD Delete( oRow, cWhere ) CLASS Fb5class
             cWhere += aKeys[ i ] + "=" + DataToSql( xField, oRow:FieldType( nField ))
 
             IF i != Len( aKeys )
-               cWhere += ","
+               cWhere += " AND "
             ENDIF
          NEXT
       ENDIF
@@ -472,10 +472,10 @@ METHOD Update( oRow, cWhere ) CLASS Fb5class
             nField := oRow:FieldPos( aKeys[ i ] )
             xField := oRow:FieldGet( nField )
 
-            cWhere += aKeys[ i ] + "=" + DataToSql( xField )
+            cWhere += aKeys[ i ] + "=" + DataToSql( xField, oRow:FieldType( nField ) )
 
             IF i != Len( aKeys )
-               cWhere += ", "
+               cWhere += " AND "
             ENDIF
          NEXT
       ENDIF
@@ -500,6 +500,7 @@ CREATE CLASS TFBQuery
    VAR      nError
    VAR      lError
    VAR      Dialect
+   VAR      nLastRecError
    VAR      lBof
    VAR      lEof
    VAR      nRecno
@@ -537,6 +538,7 @@ CREATE CLASS TFBQuery
    METHOD   FieldDec( nField )
    METHOD   FieldType( nField )
    METHOD   LastRec()
+   METHOD   LastRecError()     INLINE ::nLastRecError
 
    METHOD   FieldGet( nField )
    METHOD   GetRow()
@@ -555,6 +557,7 @@ METHOD New( nDB, cQuery, nDialect ) CLASS TFBQuery
    ::dialect := nDialect
    ::closed := .T.
    ::aKeys := NIL
+   ::nLastRecError := 0
 
    ::Refresh()
 
@@ -562,16 +565,26 @@ METHOD New( nDB, cQuery, nDialect ) CLASS TFBQuery
 
 METHOD LastRec() CLASS TFBQuery
    LOCAL nTotal := 0
-   // Se voc� quiser manter a contagem exata para a barra de progresso:
-   // Como a query est� ativa, podemos fazer um clone ou contar os elementos se j� estiverem em cache,
-   // ou executar um COUNT r�pido na mesma string de SQL.
-   // Para manter simples e compat�vel com sua l�gica:
-   LOCAL oQCount := TFBQuery():New( ::db, "SELECT COUNT(*) FROM (" + ::query + ")", ::dialect )
+   LOCAL oQCount := TFBQuery():New( ::db, "SELECT COUNT(*) FROM (" + ::query + ") AS FB5_COUNT", ::dialect )
    
-   IF oQCount != NIL
-      nTotal := ToNumber( oQCount:FieldGet( 1 ) )
-      oQCount:Destroy()
+   ::nLastRecError := 0
+   IF oQCount == NIL
+      ::nLastRecError := -1
+      RETURN -1
    ENDIF
+
+   IF oQCount:NetErr()
+      ::nLastRecError := oQCount:ErrorNo()
+      nTotal := -1
+   ELSE
+      IF oQCount:Fetch()
+         nTotal := ToNumber( oQCount:FieldGet( 1 ) )
+      ELSEIF oQCount:NetErr()
+         ::nLastRecError := oQCount:ErrorNo()
+         nTotal := -1
+      ENDIF
+   ENDIF
+   oQCount:Destroy()
    RETURN nTotal
    
 METHOD SetError( nCode, cContext, cQuery ) CLASS TFBQuery
@@ -600,6 +613,7 @@ METHOD Refresh() CLASS TFBQuery
    ::closed := .F.
    ::numcols := 0
    ::aStruct := {}
+   ::qry := NIL
    ::nError := 0
    ::lError := .F.
 
@@ -636,11 +650,15 @@ METHOD Destroy() CLASS TFBQuery
    LOCAL result := .T.
    LOCAL n
 
-   IF ! ::lError .AND. ( n := FBFree( ::qry ) ) < 0
-      ::lError := .T.
-      ::nError := n
+   IF ! ::closed .AND. HB_ISARRAY( ::qry )
+      IF ( n := FBFree( ::qry ) ) < 0
+         ::lError := .T.
+         ::nError := n
+         result := .F.
+      ENDIF
    ENDIF
 
+   ::qry := NIL
    ::closed := .T.
 
    RETURN result
@@ -772,7 +790,7 @@ METHOD FieldGet( nField ) CLASS TFBQuery
             result := hb_SToD()
          ENDIF
          
-      ELSEIF cType == "T"
+      ELSEIF cType == "T" .OR. cType == "H"
          IF result != NIL
             result := UniversalDateTime( result ) // <-- INJE��O: Conversor Universal de Data e Hora
          ELSE
@@ -837,6 +855,7 @@ METHOD GetBlankRow() CLASS TFBQuery
             aRow[ i ] := hb_SToD()
             EXIT
          CASE "T"
+         CASE "H"
             aRow[ i ] := hb_SToT()
             EXIT
          ENDSWITCH
@@ -1039,6 +1058,7 @@ STATIC FUNCTION DataToSql( xField, cType )
 
    LOCAL nSeconds
    LOCAL nMillis
+   LOCAL cTime
 
    hb_default( @cType, "" )
 
@@ -1066,35 +1086,23 @@ STATIC FUNCTION DataToSql( xField, cType )
       RETURN iif( xField, "TRUE", "FALSE" )
 
    CASE "T"
-      IF Empty( xField )
+   CASE "H"
+      IF cType != "H" .AND. Empty( xField )
          RETURN "NULL"
       ENDIF
 
       nSeconds := Int( hb_Sec( xField ) )
-      nMillis  := Int( ( hb_Sec( xField ) - nSeconds ) * 1000 + 0.5 )
+      nMillis  := Min( 999, Int( ( hb_Sec( xField ) - nSeconds ) * 1000 + 0.5 ) )
+      cTime := StrZero( hb_Hour( xField ), 2 ) + ":" + ;
+               StrZero( hb_Minute( xField ), 2 ) + ":" + ;
+               StrZero( nSeconds, 2 ) + "." + StrZero( nMillis, 3 )
 
+      IF cType == "H"
+         RETURN "TIME '" + cTime + "'"
+      ENDIF
       RETURN "TIMESTAMP '" + StrZero( Year( xField ), 4 ) + "-" + ;
              StrZero( Month( xField ), 2 ) + "-" + ;
-             StrZero( Day( xField ), 2 ) + " " + ;
-             StrZero( hb_Hour( xField ), 2 ) + ":" + ;
-             StrZero( hb_Minute( xField ), 2 ) + ":" + ;
-             StrZero( nSeconds, 2 ) + "." + ;
-             StrZero( nMillis, 3 ) + "'"
-
-   OTHERWISE
-      IF cType == "H" .AND. ValType( xField ) == "T"
-         IF Empty( xField )
-            RETURN "NULL"
-         ENDIF
-
-         nSeconds := Int( hb_Sec( xField ) )
-         nMillis  := Int( ( hb_Sec( xField ) - nSeconds ) * 1000 + 0.5 )
-
-         RETURN "TIME '" + StrZero( hb_Hour( xField ), 2 ) + ":" + ;
-                StrZero( hb_Minute( xField ), 2 ) + ":" + ;
-                StrZero( nSeconds, 2 ) + "." + ;
-                StrZero( nMillis, 3 ) + "'"
-      ENDIF
+             StrZero( Day( xField ), 2 ) + " " + cTime + "'"
    ENDSWITCH
 
    RETURN "NULL"
@@ -1213,7 +1221,7 @@ STATIC FUNCTION StructConvert( aStru, db, dialect )
             cType := "D"; nSize := 8; EXIT
 
          CASE IB_SQL_TYPE_TIME
-            cType := "T"; nSize := 8; EXIT
+            cType := "H"; nSize := 8; EXIT
 
          CASE IB_SQL_BLOB
             IF nSubType == 0
