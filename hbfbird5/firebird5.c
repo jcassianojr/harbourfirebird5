@@ -131,8 +131,13 @@ HB_FUNC( FBCONNECT )
 
    if( charset && charset[ 0 ] != '\0' )
    {
-      dpb[ i++ ] = isc_dpb_lc_ctype;
       len        = ( int ) strlen( charset );
+      if( len > 255 || len > ( int ) ( sizeof( dpb ) - i - 2 ) )
+      {
+         hb_errRT_BASE( EG_ARG, 2020, NULL, HB_ERR_FUNCNAME, HB_ERR_ARGS_BASEPARAMS );
+         return;
+      }
+      dpb[ i++ ] = isc_dpb_lc_ctype;
       dpb[ i++ ] = ( char ) len;
       hb_strncpy( &( dpb[ i ] ), charset, len );
       i += ( short ) len;
@@ -299,7 +304,10 @@ HB_FUNC( FBQUERY )
 
       if( isc_dsql_allocate_statement( status, &db, &stmt ) )
       {
-         hb_retnl( isc_sqlcode( status ) );
+         long sqlcode = isc_sqlcode( status );
+         if( ! HB_ISPOINTER( 4 ) )
+            isc_rollback_transaction( status, &trans );
+         hb_retnl( sqlcode );
          return;
       }
 
@@ -309,15 +317,25 @@ HB_FUNC( FBQUERY )
 
       if( isc_dsql_prepare( status, &trans, &stmt, 0, hb_parcx( 2 ), dialect, sqlda ) )
       {
+         long sqlcode = isc_sqlcode( status );
+         ISC_STATUS_ARRAY cleanup_status;
          hb_xfree( sqlda );
-         hb_retnl( isc_sqlcode( status ) );
+         isc_dsql_free_statement( cleanup_status, &stmt, DSQL_drop );
+         if( ! HB_ISPOINTER( 4 ) )
+            isc_rollback_transaction( cleanup_status, &trans );
+         hb_retnl( sqlcode );
          return;
       }
 
       if( isc_dsql_describe( status, &stmt, dialect, sqlda ) )
       {
+         long sqlcode = isc_sqlcode( status );
+         ISC_STATUS_ARRAY cleanup_status;
          hb_xfree( sqlda );
-         hb_retnl( isc_sqlcode( status ) );
+         isc_dsql_free_statement( cleanup_status, &stmt, DSQL_drop );
+         if( ! HB_ISPOINTER( 4 ) )
+            isc_rollback_transaction( cleanup_status, &trans );
+         hb_retnl( sqlcode );
          return;
       }
 
@@ -330,8 +348,13 @@ HB_FUNC( FBQUERY )
 
          if( isc_dsql_describe( status, &stmt, dialect, sqlda ) )
          {
+            long sqlcode = isc_sqlcode( status );
+            ISC_STATUS_ARRAY cleanup_status;
             hb_xfree( sqlda );
-            hb_retnl( isc_sqlcode( status ) );
+            isc_dsql_free_statement( cleanup_status, &stmt, DSQL_drop );
+            if( ! HB_ISPOINTER( 4 ) )
+               isc_rollback_transaction( cleanup_status, &trans );
+            hb_retnl( sqlcode );
             return;
          }
       }
@@ -343,6 +366,9 @@ HB_FUNC( FBQUERY )
       for( i = 0, var = sqlda->sqlvar; i < sqlda->sqld; i++, var++ )
       {
          int dtype = ( var->sqltype & ~1 );
+
+         var->sqldata = NULL;
+         var->sqlind  = NULL;
 
          switch( dtype )
          {
@@ -398,6 +424,8 @@ HB_FUNC( FBQUERY )
 
       if( isc_dsql_execute( status, &trans, &stmt, dialect, ( sqlda->sqld ? sqlda : NULL ) ) )
       {
+         long sqlcode = isc_sqlcode( status );
+         ISC_STATUS_ARRAY cleanup_status;
          for( i = 0; i < sqlda->sqld; i++ )
          {
             if( sqlda->sqlvar[ i ].sqldata )
@@ -406,10 +434,12 @@ HB_FUNC( FBQUERY )
                hb_xfree( sqlda->sqlvar[ i ].sqlind );
          }
          hb_xfree( sqlda );
-         isc_dsql_free_statement( status, &stmt, DSQL_drop );
+         isc_dsql_free_statement( cleanup_status, &stmt, DSQL_drop );
+         if( ! HB_ISPOINTER( 4 ) )
+            isc_rollback_transaction( cleanup_status, &trans );
 
          hb_itemRelease( aNew );
-         hb_retnl( isc_sqlcode( status ) );
+         hb_retnl( sqlcode );
          return;
       }
 
@@ -499,13 +529,12 @@ HB_FUNC( FBGETDATA )
    {
       XSQLVAR *         var;
       XSQLDA *          sqlda = ( XSQLDA * ) hb_itemGetPtr( hb_itemArrayGet( aParam, 2 ) );
-      ISC_STATUS_ARRAY status;
 
       int pos = hb_parni( 2 ) - 1;
 
-      if( ! sqlda || pos < 0 || pos >= sqlda->sqln )
+      if( ! sqlda || pos < 0 || pos >= sqlda->sqld )
       {
-         hb_retnl( isc_sqlcode( status ) );
+         hb_errRT_BASE( EG_ARG, 2020, NULL, HB_ERR_FUNCNAME, HB_ERR_ARGS_BASEPARAMS );
          return;
       }
 
@@ -546,23 +575,10 @@ HB_FUNC( FBGETDATA )
                struct tm times;
                isc_decode_timestamp( ( ISC_TIMESTAMP * ) var->sqldata, &times );
                {
-                  long lJulian, lMilliSec;
-                  time_t rawtime;
-                  struct tm tinfo;
-                  
-                  memset( &tinfo, 0, sizeof( tinfo ) );
-                  tinfo.tm_year = times.tm_year;
-                  tinfo.tm_mon  = times.tm_mon;
-                  tinfo.tm_mday = times.tm_mday;
-                  tinfo.tm_hour = times.tm_hour;
-                  tinfo.tm_min  = times.tm_min;
-                  tinfo.tm_sec  = times.tm_sec;
-                  rawtime = mktime( &tinfo );
-                  
-                  lMilliSec = hb_timeEncode( times.tm_hour, times.tm_min, times.tm_sec, 
-                                             ( int ) ( ( ( ISC_TIMESTAMP * ) var->sqldata )->timestamp_time % 10000 ) / 10 );
-                  lJulian = ( long ) ( rawtime / 86400L ) + 2440588L;
-                  
+                  long lJulian   = hb_dateEncode( times.tm_year + 1900, times.tm_mon + 1, times.tm_mday );
+                  long lMilliSec = hb_timeEncode( times.tm_hour, times.tm_min, times.tm_sec,
+                                                  ( int ) ( ( ( ISC_TIMESTAMP * ) var->sqldata )->timestamp_time % 10000 ) / 10 );
+
                   hb_rettdt( lJulian, lMilliSec );
                }
                break;
@@ -586,7 +602,8 @@ HB_FUNC( FBGETDATA )
                struct tm times;
                isc_decode_sql_time( ( ISC_TIME * ) var->sqldata, &times );
                {
-                  long lMilliSec = hb_timeEncode( times.tm_hour, times.tm_min, times.tm_sec, 0 );
+                  long lMilliSec = hb_timeEncode( times.tm_hour, times.tm_min, times.tm_sec,
+                                                  ( int ) ( ( *( ISC_TIME * ) var->sqldata ) % 10000 ) / 10 );
                   hb_rettdt( 0, lMilliSec );
                }
                break;
@@ -667,7 +684,7 @@ HB_FUNC( FBGETBLOB )
       ISC_STATUS_ARRAY status;
       isc_tr_handle    trans       = ( isc_tr_handle ) 0;
       isc_blob_handle  blob_handle = ( isc_blob_handle ) 0;
-      short      blob_seg_len;
+      unsigned short blob_seg_len;
       char       blob_segment[ 512 ];
       
       ISC_QUAD   blob_id;
@@ -699,7 +716,7 @@ HB_FUNC( FBGETBLOB )
       }
 
       blob_stat = isc_get_segment( status, &blob_handle,
-                                   ( unsigned short * ) &blob_seg_len,
+                                   &blob_seg_len,
                                    sizeof( blob_segment ), blob_segment );
 
       if( blob_stat == 0 || status[ 1 ] == isc_segment )
@@ -708,17 +725,14 @@ HB_FUNC( FBGETBLOB )
 
          while( blob_stat == 0 || status[ 1 ] == isc_segment )
          {
-            char     p[ 1024 ];
             PHB_ITEM temp;
 
-            hb_snprintf( p, sizeof( p ), "%*.*s", blob_seg_len, blob_seg_len, blob_segment );
-
-            temp = hb_itemPutC( NULL, p );
+            temp = hb_itemPutCL( NULL, blob_segment, blob_seg_len );
             hb_arrayAdd( aNew, temp );
             hb_itemRelease( temp );
 
             blob_stat = isc_get_segment( status, &blob_handle,
-                                         ( unsigned short * ) &blob_seg_len,
+                                         &blob_seg_len,
                                          sizeof( blob_segment ), blob_segment );
          }
 
