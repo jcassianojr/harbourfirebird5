@@ -1035,23 +1035,66 @@ METHOD GetServerInfo() CLASS Fb5class
 
    RETURN AllTrim( cVersion )
 
-STATIC FUNCTION DataToSql( xField,cType )
-hb_default( @cType, "" ) // Prote��o obrigat�ria adicionada
+STATIC FUNCTION DataToSql( xField, cType )
+
+   LOCAL nSeconds
+   LOCAL nMillis
+
+   hb_default( @cType, "" )
+
    SWITCH ValType( xField )
    CASE "C"
-  CASE "M"
-      IF cType == "G" .OR. cType == "M" 
+   CASE "M"
+      IF cType == "G" .OR. cType == "M"
          RETURN "X'" + hb_StrToHex( xField ) + "'"
       ELSE
          RETURN "'" + StrTran( xField, "'", "''" ) + "'"
       ENDIF
+
    CASE "D"
-      IF Empty( xField ); RETURN "NULL"; ENDIF
-      RETURN "'" + StrZero( Year( xField ), 4 ) + "-" + StrZero( Month( xField ), 2 ) + "-" + StrZero( Day( xField ), 2 ) + "'"
+      IF Empty( xField )
+         RETURN "NULL"
+      ENDIF
+      RETURN "DATE '" + StrZero( Year( xField ), 4 ) + "-" + ;
+             StrZero( Month( xField ), 2 ) + "-" + ;
+             StrZero( Day( xField ), 2 ) + "'"
+
    CASE "N"
-      RETURN Str( xField )
+      RETURN AllTrim( Str( xField ) )
+
    CASE "L"
       RETURN iif( xField, "TRUE", "FALSE" )
+
+   CASE "T"
+      IF Empty( xField )
+         RETURN "NULL"
+      ENDIF
+
+      nSeconds := Int( hb_Sec( xField ) )
+      nMillis  := Int( ( hb_Sec( xField ) - nSeconds ) * 1000 + 0.5 )
+
+      RETURN "TIMESTAMP '" + StrZero( Year( xField ), 4 ) + "-" + ;
+             StrZero( Month( xField ), 2 ) + "-" + ;
+             StrZero( Day( xField ), 2 ) + " " + ;
+             StrZero( hb_Hour( xField ), 2 ) + ":" + ;
+             StrZero( hb_Minute( xField ), 2 ) + ":" + ;
+             StrZero( nSeconds, 2 ) + "." + ;
+             StrZero( nMillis, 3 ) + "'"
+
+   OTHERWISE
+      IF cType == "H" .AND. ValType( xField ) == "T"
+         IF Empty( xField )
+            RETURN "NULL"
+         ENDIF
+
+         nSeconds := Int( hb_Sec( xField ) )
+         nMillis  := Int( ( hb_Sec( xField ) - nSeconds ) * 1000 + 0.5 )
+
+         RETURN "TIME '" + StrZero( hb_Hour( xField ), 2 ) + ":" + ;
+                StrZero( hb_Minute( xField ), 2 ) + ":" + ;
+                StrZero( nSeconds, 2 ) + "." + ;
+                StrZero( nMillis, 3 ) + "'"
+      ENDIF
    ENDSWITCH
 
    RETURN "NULL"
