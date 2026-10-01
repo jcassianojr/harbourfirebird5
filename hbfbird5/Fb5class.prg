@@ -1,6 +1,6 @@
 /*
  * Firebird RDBMS low-level (client API) interface code for Firebird 5.
- * Adapted for Harbour Project (Fb5class - Versão Final Otimizada)
+ * Adapted for Harbour Project (Fb5class - Versï¿½o Final Otimizada)
  */
 
 #include "hbclass.ch"
@@ -25,7 +25,7 @@ FUNCTION FBClass_SetLoadMemos( lLoad )
    ENDIF
    RETURN lOld
 
-// --- Restante do código original ---
+// --- Restante do cï¿½digo original ---
 // CREATE CLASS Fb5class ...
 
 /* Macros oficiais do Firebird 5 / InterBase para tipos SQL e Dialetos */
@@ -125,10 +125,10 @@ METHOD SetError( nCode, cContext, cQuery ) CLASS Fb5class
 METHOD StartTransaction() CLASS Fb5class
    LOCAL result := .F.
 
-   // Impede o início se já houver transação ativa
+   // Impede o inï¿½cio se jï¿½ houver transaï¿½ï¿½o ativa
    IF ::StartedTrans
       ::lError := .T.
-      ::nError := -1 // Ou um código de erro interno customizado
+      ::nError := -1 // Ou um cï¿½digo de erro interno customizado
       // Aqui pode-se opcionalmente alimentar o novo objeto de erro (Fase 3)
       RETURN .F.
    ENDIF
@@ -149,7 +149,7 @@ METHOD StartTransaction() CLASS Fb5class
    
 METHOD Close() CLASS Fb5class
    IF ::StartedTrans
-      ::Rollback() // Política documentada: rollback automático ao destruir sem comitar
+      ::Rollback() // Polï¿½tica documentada: rollback automï¿½tico ao destruir sem comitar
    ENDIF
 
    IF !Empty( ::db )
@@ -297,13 +297,13 @@ METHOD TableStruct( cTable ) CLASS Fb5class
    IF HB_ISARRAY( qry )
       DO WHILE FBFetch( qry ) == 0
          cField  := RTrim( iif( FBGetData( qry, 1 ) == NIL, "", FBGetData( qry, 1 ) ) )
-         nType   := Val( iif( FBGetData( qry, 2 ) == NIL, "0", FBGetData( qry, 2 ) ) )
-         nSize   := Val( iif( FBGetData( qry, 3 ) == NIL, "0", FBGetData( qry, 3 ) ) )
-         nDec    := Val( iif( FBGetData( qry, 4 ) == NIL, "0", FBGetData( qry, 4 ) ) )
-         nSubType := Val( iif( FBGetData( qry, 6 ) == NIL, "0", FBGetData( qry, 6 ) ) ) // Captura o Subtipo
+         nType   := ToNumber( FBGetData( qry, 2 ) )
+         nSize   := ToNumber( FBGetData( qry, 3 ) )
+         nDec    := ToNumber( FBGetData( qry, 4 ) )
+         nSubType := ToNumber( FBGetData( qry, 6 ) ) // Captura o Subtipo
          cDomain := RTrim( iif( FBGetData( qry, 5 ) == NIL, "", FBGetData( qry, 5 ) ) )
 
-         // Tratamento explícito para evitar ambiguidade (W0001) e uso correto de nType (W0032)
+         // Tratamento explï¿½cito para evitar ambiguidade (W0001) e uso correto de nType (W0032)
          SWITCH nType
             CASE IB_SQL_BOOLEAN
                cType := "L"
@@ -350,7 +350,7 @@ METHOD TableStruct( cTable ) CLASS Fb5class
                nSize := 15
                EXIT
             CASE 35 // TIMESTAMP
-                cType := "T" // <-- Alterado de "D" para "T" para manter consistência com o Wrapper e StructConvert                
+                cType := "T" // <-- Alterado de "D" para "T" para manter consistï¿½ncia com o Wrapper e StructConvert                
                 nSize := 20
                 EXIT
             CASE 37 // VARCHAR
@@ -359,7 +359,7 @@ METHOD TableStruct( cTable ) CLASS Fb5class
                EXIT
            CASE 261 // BLOB
                IF nSubType == 0
-                  cType := "G" // Binário / OLE
+                  cType := "G" // Binï¿½rio / OLE
                ELSE
                   cType := "M" // Texto / MEMO
                ENDIF
@@ -443,7 +443,7 @@ METHOD Append( oRow ) CLASS Fb5class
             IF FBFetch( qryIns ) == 0
                nPosPK := oRow:FieldPos( aKeys[ 1 ] )
                IF nPosPK > 0
-                  oRow:FieldPut( nPosPK, Val( FBGetData( qryIns, 1 ) ) )
+                  oRow:FieldPut( nPosPK, ToNumber( FBGetData( qryIns, 1 ) ) )
                ENDIF
             ENDIF
             FBFree( qryIns )
@@ -562,14 +562,14 @@ METHOD New( nDB, cQuery, nDialect ) CLASS TFBQuery
 
 METHOD LastRec() CLASS TFBQuery
    LOCAL nTotal := 0
-   // Se você quiser manter a contagem exata para a barra de progresso:
-   // Como a query está ativa, podemos fazer um clone ou contar os elementos se já estiverem em cache,
-   // ou executar um COUNT rápido na mesma string de SQL.
-   // Para manter simples e compatível com sua lógica:
+   // Se vocï¿½ quiser manter a contagem exata para a barra de progresso:
+   // Como a query estï¿½ ativa, podemos fazer um clone ou contar os elementos se jï¿½ estiverem em cache,
+   // ou executar um COUNT rï¿½pido na mesma string de SQL.
+   // Para manter simples e compatï¿½vel com sua lï¿½gica:
    LOCAL oQCount := TFBQuery():New( ::db, "SELECT COUNT(*) FROM (" + ::query + ")", ::dialect )
    
    IF oQCount != NIL
-      nTotal := Val( oQCount:FieldGet( 1 ) )
+      nTotal := ToNumber( oQCount:FieldGet( 1 ) )
       oQCount:Destroy()
    ENDIF
    RETURN nTotal
@@ -653,13 +653,15 @@ METHOD Fetch() CLASS TFBQuery
    IF ! ::lError .AND. ! ::lEof
       IF ! ::Closed
          fetch_stat := FBFetch( ::qry )
-         ::nRecno++
 
          IF fetch_stat == 0
+            ::nRecno++
             ::lBof := .F.
             result := .T.
-         ELSE
+         ELSEIF fetch_stat == -1
             ::lEof := .T.
+         ELSE
+            ::SetError( fetch_stat, "Fetch()", ::query )
          ENDIF
       ENDIF
    ENDIF
@@ -758,7 +760,7 @@ METHOD FieldGet( nField ) CLASS TFBQuery
 
       ELSEIF cType == "N"
          IF result != NIL
-            result := Val( result )
+            result := ToNumber( result )
          ELSE
             result := 0
          ENDIF
@@ -772,7 +774,7 @@ METHOD FieldGet( nField ) CLASS TFBQuery
          
       ELSEIF cType == "T"
          IF result != NIL
-            result := UniversalDateTime( result ) // <-- INJEÇÃO: Conversor Universal de Data e Hora
+            result := UniversalDateTime( result ) // <-- INJEï¿½ï¿½O: Conversor Universal de Data e Hora
          ELSE
             result := hb_SToT()
          ENDIF   
@@ -833,6 +835,9 @@ METHOD GetBlankRow() CLASS TFBQuery
             EXIT
          CASE "D"
             aRow[ i ] := hb_SToD()
+            EXIT
+         CASE "T"
+            aRow[ i ] := hb_SToT()
             EXIT
          ENDSWITCH
       NEXT
@@ -913,7 +918,7 @@ METHOD FieldPut( nField, Value ) CLASS TFBRow
    IF nField >= 1 .AND. nField <= Len( ::aRow )
       cType := ::FieldType( nField )
       
-      // Proteção de Lazy Loading: Impede que rótulos temporários substituam os dados reais
+      // Proteï¿½ï¿½o de Lazy Loading: Impede que rï¿½tulos temporï¿½rios substituam os dados reais
       IF cType == "G" .AND. ( ( ValType( Value ) == "C" .AND. Value == "<IMAGEM/BLOB>" ) .OR. !t_lLoadBlobs )
          RETURN Value
       ENDIF
@@ -1031,7 +1036,7 @@ METHOD GetServerInfo() CLASS Fb5class
    RETURN AllTrim( cVersion )
 
 STATIC FUNCTION DataToSql( xField,cType )
-hb_default( @cType, "" ) // Proteção obrigatória adicionada
+hb_default( @cType, "" ) // Proteï¿½ï¿½o obrigatï¿½ria adicionada
    SWITCH ValType( xField )
    CASE "C"
   CASE "M"
@@ -1050,6 +1055,17 @@ hb_default( @cType, "" ) // Proteção obrigatória adicionada
    ENDSWITCH
 
    RETURN "NULL"
+
+STATIC FUNCTION ToNumber( xValue )
+   DO CASE
+   CASE ValType( xValue ) == "N"
+      RETURN xValue
+   CASE ValType( xValue ) == "C"
+      RETURN Val( xValue )
+   OTHERWISE
+      RETURN 0
+   ENDCASE
+   RETURN 0
 
 STATIC FUNCTION StructConvert( aStru, db, dialect )
 
@@ -1154,7 +1170,7 @@ STATIC FUNCTION StructConvert( aStru, db, dialect )
             cType := "D"; nSize := 8; EXIT
 
          CASE IB_SQL_TYPE_TIME
-            cType := "C"; nSize := 8; EXIT
+            cType := "T"; nSize := 8; EXIT
 
          CASE IB_SQL_BLOB
             IF nSubType == 0
@@ -1185,7 +1201,7 @@ STATIC FUNCTION RemoveSpaces( cQuery )
 // +--------------------------------------------------------------------
 // +
 // +    Static Function strlogicClasse( cVAL, lDEFAULT )
-// +    Conversor universal de retornos textuais/numéricos para Booleano
+// +    Conversor universal de retornos textuais/numï¿½ricos para Booleano
 // +
 // +--------------------------------------------------------------------
 STATIC FUNCTION strlogicClasse( cVAL, lDEFAULT )
@@ -1247,7 +1263,7 @@ LOCAL dRet := CToD( "" )
       RETURN dRet
    ENDIF
    
-   // Limpa uma única vez para otimizar os testes
+   // Limpa uma ï¿½nica vez para otimizar os testes
    cCleanData := Upper( AllTrim( xData ) )
 
    // Barreira imediata contra literais nulos/vazios
@@ -1258,7 +1274,7 @@ LOCAL dRet := CToD( "" )
    cTemp := AllTrim( xData )
 
    // -------------------------------------------------------------------------
-   // Suporte a Formatos HTTP-date e Logs (Inglês e Português)
+   // Suporte a Formatos HTTP-date e Logs (Inglï¿½s e Portuguï¿½s)
    // -------------------------------------------------------------------------
    cTemp := StrTran( cTemp, ",", " " )
    cTemp := StrTran( cTemp, "-", " " )
@@ -1273,19 +1289,19 @@ LOCAL dRet := CToD( "" )
       FOR i := 1 TO Len( aParts )
          cMesStr := Upper( Left( aParts[ i ], 3 ) )
          
-         // 1. Busca primeiro em Inglês
+         // 1. Busca primeiro em Inglï¿½s
          nMes := AScan( aMonthsEN, cMesStr )
          
-         // 2. Se não encontrar, tenta em Português
+         // 2. Se nï¿½o encontrar, tenta em Portuguï¿½s
          IF nMes == 0
             nMes := AScan( aMonthsPT, cMesStr )
          ENDIF
          
-         // Se encontrou o mês, processa
+         // Se encontrou o mï¿½s, processa
          IF nMes > 0
             cMes := StrZero( nMes, 2 )
             
-            // Extrai o Dia e o Ano baseado na posição do Mês (ANSI C vs RFC)
+            // Extrai o Dia e o Ano baseado na posiï¿½ï¿½o do Mï¿½s (ANSI C vs RFC)
             IF i == 2 .AND. Len( aParts ) >= 5 // ANSI C asctime
                cDia := StrZero( Val( aParts[ 3 ] ), 2 )
                cAno := aParts[ 5 ]
@@ -1359,7 +1375,7 @@ LOCAL dRet := CToD( "" )
 RETURN dRet
 
 // +--------------------------------------------------------------------
-// +    Funções de Apoio para Leitura e Gravação Sob Demanda (Fb5Class)
+// +    Funï¿½ï¿½es de Apoio para Leitura e Gravaï¿½ï¿½o Sob Demanda (Fb5Class)
 // +--------------------------------------------------------------------
 
 FUNCTION FBClass_PegarMemo( oObj, cCampo )
@@ -1402,9 +1418,9 @@ FUNCTION FBClass_GravarBlobJpg( oRow, cCampo, cDir )
    
    
     // +--------------------------------------------------------------------
-// +  Função: UniversalDateTime
-// +  Objetivo: Tratar datas complexas mantendo e corrigindo o horário
-// +  Retorna: Timestamp nativo (T) de alta precisão
+// +  Funï¿½ï¿½o: UniversalDateTime
+// +  Objetivo: Tratar datas complexas mantendo e corrigindo o horï¿½rio
+// +  Retorna: Timestamp nativo (T) de alta precisï¿½o
 // +--------------------------------------------------------------------
 STATIC FUNCTION UniversalDateTime( xData )
 
@@ -1412,19 +1428,19 @@ STATIC FUNCTION UniversalDateTime( xData )
    LOCAL cTime := "00:00:00"
    LOCAL nHour := 0, nMin := 0, nSec := 0
 
-   // 1. Já é Data ou Timestamp? Trata a conversão direta
+   // 1. Jï¿½ ï¿½ Data ou Timestamp? Trata a conversï¿½o direta
    IF ValType( xData ) == "T"
       RETURN xData
    ELSEIF ValType( xData ) == "D"
       RETURN hb_DateTime( Year(xData), Month(xData), Day(xData) )
    ENDIF
 
-   // 2. Barreira para nulos ou variáveis não suportadas
+   // 2. Barreira para nulos ou variï¿½veis nï¿½o suportadas
    IF ValType( xData ) <> "C" .OR. Empty( xData )
       RETURN hb_DateTime( 0, 0, 0 )
    ENDIF
 
-   // 3. Limpa espaços e conserta erros como ";" ou tags ISO "T"
+   // 3. Limpa espaï¿½os e conserta erros como ";" ou tags ISO "T"
    cStr := AllTrim( xData )
    cStr := StrTran( cStr, ";", ":" )
    cStr := StrTran( cStr, "T", " " )
@@ -1432,18 +1448,18 @@ STATIC FUNCTION UniversalDateTime( xData )
    aParts := hb_ATokens( cStr, " " )
    cDataLimpa := ""
 
-   // 4. Caçador de Horários
+   // 4. Caï¿½ador de Horï¿½rios
    FOR i := 1 TO Len( aParts )
       IF ":" $ aParts[i] .AND. Val( StrTran( aParts[i], ":", "" ) ) >= 0
          cTime := aParts[i] // Isola apenas a hora encontrada
       ELSE
-         cDataLimpa += aParts[i] + " " // Reconstrói string base só da data
+         cDataLimpa += aParts[i] + " " // Reconstrï¿½i string base sï¿½ da data
       ENDIF
    NEXT
 
    cDataLimpa := AllTrim( cDataLimpa )
    
-   // 5. Utiliza o motor otimizado para extrair o calendário válido
+   // 5. Utiliza o motor otimizado para extrair o calendï¿½rio vï¿½lido
    dData := StrDateclass( cDataLimpa )
 
    // Fallback se a rotina retornar vazio, checa direto via Harbour CToD
@@ -1455,7 +1471,7 @@ STATIC FUNCTION UniversalDateTime( xData )
       RETURN hb_DateTime( 0, 0, 0 )
    ENDIF
 
-   // 6. Separa e converte as partes do Horário
+   // 6. Separa e converte as partes do Horï¿½rio
    aParts := hb_ATokens( cTime, ":" )
    IF Len( aParts ) >= 1; nHour := Val( aParts[1] ); ENDIF
    IF Len( aParts ) >= 2; nMin  := Val( aParts[2] ); ENDIF
