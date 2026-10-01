@@ -1,6 +1,6 @@
 // +--------------------------------------------------------------------
 // +    Programa  : fb5rdd.prg
-// +    Sistema   : RDD Nativo para Firebird 5 (Com Otimizações SQLRDD)
+// +    Sistema   : RDD Nativo para Firebird 5 (Com Otimizaï¿½ï¿½es SQLRDD)
 // +    Linguagem : Harbour
 // +--------------------------------------------------------------------
 
@@ -24,9 +24,11 @@
 #define AREA_FIELDS       10
 #define AREA_STRUCT       11
 #define AREA_QUERY        12
-#define AREA_FETCHED_EOF  13
 #define AREA_TYPES        14
-#define AREA_LEN          14
+#define AREA_SQLTYPES     15
+#define AREA_SQLSUBTYPES  16
+#define AREA_DIRTY        17
+#define AREA_LEN          17
 
 ANNOUNCE FB5RDD
 
@@ -35,21 +37,19 @@ THREAD STATIC t_lLoadBlobs := .F.
 THREAD STATIC t_lLoadMemos := .F.
 
 // +--------------------------------------------------------------------
-// +    Funções de Gerenciamento de Conexão e Transação (Otimizadas)[cite: 17]
+// +    Funï¿½ï¿½es de Gerenciamento de Conexï¿½o e Transaï¿½ï¿½o (Otimizadas)[cite: 17]
 // +--------------------------------------------------------------------
 
 FUNCTION DBFB5CONNECTION( cServer, cUser, cPassword, nDialect, cCharSet )
    LOCAL db
    
    hb_default( @nDialect, 3 )
-   hb_default( @cCharSet, "UTF8" ) // Pode deixar aqui para uso futuro
+   hb_default( @cCharSet, "UTF8" )
 
-   // CORREÇÃO: Removido o cCharSet da chamada até que o firebird5.c seja atualizado
- //  db := FBConnect( cServer, cUser, cPassword )
    db := FBConnect( cServer, cUser, cPassword, cCharSet )
    
    IF HB_ISNUMERIC( db )
-      Alert( "Erro ao conectar Firebird via RDD (Cód): " + hb_ntos( db ) )
+      Alert( "Erro ao conectar Firebird via RDD (Cï¿½d): " + hb_ntos( db ) )
       RETURN 0
    ENDIF
 
@@ -75,18 +75,18 @@ FUNCTION DBFB5CLEARCONNECTION( nConn )
 
 //FUNCTION DBFB5COMMIT( nConn )
 //   LOCAL db := s_aConnections[ nConn ][ 1 ]
-   // Agora aponta para a C-API recém criada
+   // Agora aponta para a C-API recï¿½m criada
 //   RETURN FBCommitTransaction( db )
 
 //FUNCTION DBFB5ROLLBACK( nConn )
 //   LOCAL db := s_aConnections[ nConn ][ 1 ]
-   // Agora aponta para a C-API recém criada
+   // Agora aponta para a C-API recï¿½m criada
 //   RETURN FBRollbackTransaction( db )
  
  FUNCTION DBFB5COMMIT( nConn )
    // Como o RDD atualmente opera em modo "Auto-Commit" nativo da API C,
-   // operações de commit explícito não têm efeito sobre transações de RDD padrão.
-   // Se integrar com TFBQuery futuramente, o ponteiro da transação deve ser passado aqui.
+   // operaï¿½ï¿½es de commit explï¿½cito nï¿½o tï¿½m efeito sobre transaï¿½ï¿½es de RDD padrï¿½o.
+   // Se integrar com TFBQuery futuramente, o ponteiro da transaï¿½ï¿½o deve ser passado aqui.
    HB_SYMBOL_UNUSED( nConn )
    RETURN SUCCESS
 
@@ -95,7 +95,7 @@ FUNCTION DBFB5ROLLBACK( nConn )
    RETURN SUCCESS  
    
 // +--------------------------------------------------------------------
-// +    Configuração de Chave Primária
+// +    Configuraï¿½ï¿½o de Chave Primï¿½ria
 // +--------------------------------------------------------------------
 
 FUNCTION FB5_SETPK( cAlias, cFields )
@@ -119,7 +119,7 @@ FUNCTION FB5_SETPK( cAlias, cFields )
    RETURN .F.
 
 // +--------------------------------------------------------------------
-// +    Métodos Internos da RDD
+// +    Mï¿½todos Internos da RDD
 // +--------------------------------------------------------------------
 
 STATIC FUNCTION FB5_INIT( nRDD ); USRRDD_RDDDATA( nRDD ); RETURN SUCCESS
@@ -136,13 +136,13 @@ STATIC FUNCTION FB5_ADDFIELD( nWA, aField )
 STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
    LOCAL db, dialect, qry, oError, qryMeta, qryPk
-   LOCAL i, nCols, aStru, cTableName, aField
-   LOCAL cName, nType, nSize, nDec, cType
+   LOCAL i, nCols, aStru, cTableName, aField, nFetch
+   LOCAL cName, nType, nSize, nDec, cType, nSubType
    LOCAL aLocalPrecision := {}
    LOCAL nPosMeta
    LOCAL cFldName, xPrec, xLen, xSubType, cPkField, cSqlPkQuery
 
-   // 1. Resgata a conexão e o dialeto guardados no array interno
+   // 1. Resgata a conexï¿½o e o dialeto guardados no array interno
    IF !Empty( aOpenInfo[ UR_OI_CONNECT ] ) .AND. aOpenInfo[ UR_OI_CONNECT ] <= Len( s_aConnections )
       db      := s_aConnections[ aOpenInfo[ UR_OI_CONNECT ] ][ 1 ]
       dialect := s_aConnections[ aOpenInfo[ UR_OI_CONNECT ] ][ 2 ]
@@ -161,27 +161,43 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
 
    cTableName := AllTrim( aOpenInfo[ UR_OI_NAME ] )
 
-   // 2. Consulta direta aos Metadados para obter a precisão exata dos campos
+   // 2. Consulta direta aos Metadados para obter a precisï¿½o exata dos campos
    qryMeta := FBQuery( db, "SELECT TRIM(A.RDB$FIELD_NAME), B.RDB$FIELD_PRECISION, B.RDB$CHARACTER_LENGTH, B.RDB$FIELD_SUB_TYPE FROM RDB$RELATION_FIELDS A JOIN RDB$FIELDS B ON A.RDB$FIELD_SOURCE = B.RDB$FIELD_NAME WHERE TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "'", dialect )
    
-   IF HB_ISARRAY( qryMeta )
-      WHILE FBFetch( qryMeta ) == 0
+   IF !HB_ISARRAY( qryMeta )
+      oError := ErrorNew()
+      oError:GenCode := EG_OPEN
+      oError:Description := "FB5RDD: Falha ao consultar metadados - " + FBError( qryMeta )
+      UR_SUPER_ERROR( nWA, oError )
+      RETURN FAILURE
+   ENDIF
+   DO WHILE .T.
+      nFetch := FBFetch( qryMeta )
+      IF nFetch == -1
+         EXIT
+      ELSEIF nFetch != 0
+         FBFree( qryMeta )
+         oError := ErrorNew()
+         oError:GenCode := EG_OPEN
+         oError:Description := "FB5RDD: Falha ao ler metadados - " + FBError( nFetch )
+         UR_SUPER_ERROR( nWA, oError )
+         RETURN FAILURE
+      ENDIF
          cFldName := FBGetData( qryMeta, 1 )
          xPrec    := FBGetData( qryMeta, 2 )
          xLen     := FBGetData( qryMeta, 3 )
          xSubType := FBGetData( qryMeta, 4 ) 
          
          cFldName := iif( cFldName == NIL, "", Upper( AllTrim( cFldName ) ) )
-         xPrec    := iif( xPrec == NIL, 0, Val( xPrec ) )
-         xLen     := iif( xLen == NIL, 0, Val( xLen ) )
-         xSubType := iif( xSubType == NIL, 1, Val( xSubType ) )
+         xPrec    := iif( xPrec == NIL, 0, FB5_ToNumber( xPrec ) )
+         xLen     := iif( xLen == NIL, 0, FB5_ToNumber( xLen ) )
+         xSubType := iif( xSubType == NIL, 1, FB5_ToNumber( xSubType ) )
          
          AAdd( aLocalPrecision, { cFldName, xPrec, xLen, xSubType } )
-      ENDDO
-      FBFree( qryMeta )
-   ENDIF
+   ENDDO
+   FBFree( qryMeta )
 
-   // 3. Descobre a Chave Primária obrigatoriamente exigida pelo Keyset Driven
+   // 3. Descobre a Chave Primï¿½ria obrigatoriamente exigida pelo Keyset Driven
    aWAData[ AREA_PK ] := {}
    qryPk := FBQuery( db, "SELECT TRIM(B.RDB$FIELD_NAME) FROM RDB$RELATION_CONSTRAINTS A " + ;
                          "JOIN RDB$INDEX_SEGMENTS B ON A.RDB$INDEX_NAME = B.RDB$INDEX_NAME " + ;
@@ -189,15 +205,31 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
                          "AND TRIM(A.RDB$RELATION_NAME) = '" + Upper( cTableName ) + "' " + ;
                          "ORDER BY B.RDB$FIELD_POSITION", dialect )
 
-   IF HB_ISARRAY( qryPk )
-      WHILE FBFetch( qryPk ) == 0
+   IF !HB_ISARRAY( qryPk )
+      oError := ErrorNew()
+      oError:GenCode := EG_OPEN
+      oError:Description := "FB5RDD: Falha ao consultar a chave primaria - " + FBError( qryPk )
+      UR_SUPER_ERROR( nWA, oError )
+      RETURN FAILURE
+   ENDIF
+   DO WHILE .T.
+      nFetch := FBFetch( qryPk )
+      IF nFetch == -1
+         EXIT
+      ELSEIF nFetch != 0
+         FBFree( qryPk )
+         oError := ErrorNew()
+         oError:GenCode := EG_OPEN
+         oError:Description := "FB5RDD: Falha ao ler a chave primaria - " + FBError( nFetch )
+         UR_SUPER_ERROR( nWA, oError )
+         RETURN FAILURE
+      ENDIF
          cPkField := FBGetData( qryPk, 1 )
          IF cPkField != NIL
             AAdd( aWAData[ AREA_PK ], Upper( AllTrim( cPkField ) ) )
          ENDIF
-      ENDDO
-      FBFree( qryPk )
-   ENDIF
+   ENDDO
+   FBFree( qryPk )
 
    IF Empty( aWAData[ AREA_PK ] )
       oError := ErrorNew()
@@ -207,7 +239,7 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
       RETURN FAILURE
    ENDIF
 
-   // 4. Obtém a estrutura colhendo uma linha vazia ou metadados de colunas via uma query rápida
+   // 4. Obtï¿½m a estrutura colhendo uma linha vazia ou metadados de colunas via uma query rï¿½pida
    qry := FBQuery( db, "SELECT * FROM " + cTableName + " WHERE 1 = 0", dialect )
    IF HB_ISNUMERIC( qry )
       oError := ErrorNew()
@@ -221,16 +253,18 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    aStru := qry[ 6 ]
    FBFree( qry ) // Libera a query de estrutura vazia
 
-   // 5. Inicializa os dados da Área de Trabalho
+   // 5. Inicializa os dados da ï¿½rea de Trabalho
    aWAData[ AREA_CONN ]        := { db, dialect }
    aWAData[ AREA_TABLE ]       := cTableName
    aWAData[ AREA_RECNO ]       := 0
    aWAData[ AREA_APPEND ]      := .F.
    aWAData[ AREA_FIELDS ]      := {}
    aWAData[ AREA_TYPES ]       := {}
+   aWAData[ AREA_SQLTYPES ]    := {}
+   aWAData[ AREA_SQLSUBTYPES ] := {}
+   aWAData[ AREA_DIRTY ]       := NIL
    aWAData[ AREA_CACHE ]       := {}     // Guarda apenas as PKs carregadas inicialmente
    aWAData[ AREA_QUERY ]       := NIL
-   aWAData[ AREA_FETCHED_EOF ] := .F.
 
    UR_SUPER_SETFIELDEXTENT( nWA, nCols )
 
@@ -240,9 +274,11 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
       nType := aStru[ i ][ 2 ]
       nSize := aStru[ i ][ 3 ]
       nDec  := aStru[ i ][ 4 ] * -1
+      nSubType := 0
 
       nPosMeta := AScan( aLocalPrecision, {|x| x[1] == cName } )
       IF nPosMeta > 0
+         nSubType := aLocalPrecision[ nPosMeta, 4 ]
          IF aLocalPrecision[ nPosMeta, 2 ] > 0
             nSize := aLocalPrecision[ nPosMeta, 2 ]
          ELSEIF aLocalPrecision[ nPosMeta, 3 ] > 0
@@ -251,26 +287,30 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
       ENDIF
 
       SWITCH nType
-         CASE 527
+         CASE IB_SQL_BOOLEAN
             cType := HB_FT_LOGICAL; nSize := 1; nDec := 0; EXIT
-         CASE 452
-         CASE 448
+         CASE IB_SQL_TEXT
+         CASE IB_SQL_VARYING
             cType := HB_FT_STRING; EXIT
-         CASE 500
-            cType := HB_FT_INTEGER; EXIT
-         CASE 496
-         CASE 580
-            cType := HB_FT_LONG; EXIT
-         CASE 482
-         CASE 480
+         CASE IB_SQL_SHORT
+            cType := iif( nDec > 0, HB_FT_DOUBLE, HB_FT_INTEGER ); EXIT
+         CASE IB_SQL_LONG
+         CASE IB_SQL_INT64
+            cType := iif( nDec > 0, HB_FT_DOUBLE, HB_FT_LONG ); EXIT
+         CASE IB_SQL_FLOAT
+         CASE IB_SQL_DOUBLE
+         CASE IB_SQL_D_FLOAT
             cType := HB_FT_DOUBLE; EXIT
-         CASE 510
-         CASE 570
+         CASE IB_SQL_TIMESTAMP
+            cType := HB_FT_TIMESTAMP; nSize := 8; nDec := 0; EXIT
+         CASE IB_SQL_TYPE_DATE
             cType := HB_FT_DATE; nSize := 8; nDec := 0; EXIT
-         CASE 520
+         CASE IB_SQL_TYPE_TIME
+            cType := HB_FT_TIMESTAMP; nSize := 8; nDec := 0; EXIT
+         CASE IB_SQL_BLOB
+         CASE IB_SQL_QUAD
             cType := HB_FT_MEMO
-            nPosMeta := AScan( aLocalPrecision, {|x| x[1] == cName } )
-            IF nPosMeta > 0 .AND. aLocalPrecision[ nPosMeta, 4 ] == 0
+            IF nSubType == 0
                cType := HB_FT_OLE
             ENDIF
             nSize := 10; nDec := 0; EXIT
@@ -286,27 +326,56 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
       
       AAdd( aWAData[ AREA_FIELDS ], cName )
       AAdd( aWAData[ AREA_TYPES ],  cType )
+      AAdd( aWAData[ AREA_SQLTYPES ], nType )
+      AAdd( aWAData[ AREA_SQLSUBTYPES ], nSubType )
       UR_SUPER_ADDFIELD( nWA, aField )
    NEXT
 
-   // 7. Carrega APENAS as Chaves Primárias para o Cache leve de navegação
-   cSqlPkQuery := "SELECT " + aWAData[ AREA_PK ][ 1 ] + " FROM " + cTableName
+   // 7. Carrega APENAS as Chaves Primï¿½rias para o Cache leve de navegaï¿½ï¿½o
+   cSqlPkQuery := "SELECT "
+   FOR i := 1 TO Len( aWAData[ AREA_PK ] )
+      IF i > 1; cSqlPkQuery += ", "; ENDIF
+      cSqlPkQuery += aWAData[ AREA_PK ][ i ]
+   NEXT
+   cSqlPkQuery += " FROM " + cTableName
    qry := FBQuery( db, cSqlPkQuery, dialect )
    
-   IF HB_ISARRAY( qry )
-      WHILE FBFetch( qry ) == 0
-         AAdd( aWAData[ AREA_CACHE ], FBGetData( qry, 1 ) )
-      ENDDO
-      FBFree( qry )
+   IF !HB_ISARRAY( qry )
+      oError := ErrorNew()
+      oError:GenCode := EG_OPEN
+      oError:Description := "FB5RDD: Falha ao carregar as chaves da tabela - " + FBError( qry )
+      UR_SUPER_ERROR( nWA, oError )
+      RETURN FAILURE
    ENDIF
+   DO WHILE .T.
+      nFetch := FBFetch( qry )
+      IF nFetch == -1
+         EXIT
+      ELSEIF nFetch != 0
+         FBFree( qry )
+         oError := ErrorNew()
+         oError:GenCode := EG_OPEN
+         oError:Description := "FB5RDD: Falha ao ler as chaves da tabela - " + FBError( nFetch )
+         UR_SUPER_ERROR( nWA, oError )
+         RETURN FAILURE
+      ENDIF
+      aField := Array( Len( aWAData[ AREA_PK ] ) )
+      FOR i := 1 TO Len( aField )
+         aField[ i ] := FBGetData( qry, i )
+      NEXT
+      AAdd( aWAData[ AREA_CACHE ], { "FB5_PK", aField } )
+   ENDDO
+   FBFree( qry )
 
    // 8. Posiciona o cursor no primeiro registo se houver dados
    IF Len( aWAData[ AREA_CACHE ] ) > 0
       aWAData[ AREA_RECNO ] := 1
       aWAData[ AREA_BOF ]   := .F.
       aWAData[ AREA_EOF ]   := .F.
-      // Hidrata a primeira linha imediatamente para visualização
-      FB5_HydrateRow( nWA, 1 )
+      // Hidrata a primeira linha imediatamente para visualizaï¿½ï¿½o
+      IF !FB5_HydrateRow( nWA, 1 )
+         RETURN FAILURE
+      ENDIF
    ELSE
       aWAData[ AREA_RECNO ] := 0
       aWAData[ AREA_BOF ]   := .T.
@@ -315,76 +384,34 @@ STATIC FUNCTION FB5_OPEN( nWA, aOpenInfo )
    
    RETURN UR_SUPER_OPEN( nWA, aOpenInfo )
 
-STATIC FUNCTION FB5_FETCH_NEXT( nWA )
-   LOCAL aWAData := USRRDD_AREADATA( nWA )
-   LOCAL qry := aWAData[ AREA_QUERY ]
-   LOCAL aRow, i, nCols, xVal, cType
-
-   IF aWAData[ AREA_FETCHED_EOF ]; RETURN .F.; ENDIF
-
-   IF FBFetch( qry ) == 0
-      nCols := qry[ 4 ]
-      aRow  := Array( nCols )
-      
-      FOR i := 1 TO nCols
-         xVal  := FBGetData( qry, i )
-         cType := aWAData[ AREA_TYPES ][ i ]
-
-         IF xVal == NIL
-            DO CASE
-               CASE cType == HB_FT_STRING .OR. cType == HB_FT_MEMO; xVal := ""
-               CASE cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER; xVal := 0
-               CASE cType == HB_FT_LOGICAL; xVal := .F.
-               CASE cType == HB_FT_DATE; xVal := CToD("")
-            ENDCASE
-         ELSE
-            IF cType == HB_FT_LOGICAL
-               // --- CONVERSOR INTELIGENTE: Lógico ---[cite: 15]
-               xVal := strlogicrdd( xVal, .F. )
-               
-            ELSEIF cType == HB_FT_DATE
-               xVal := StrDateRdd( xVal )
-               
-            ELSEIF cType == HB_FT_TIMESTAMP
-               xVal := UniversalDateTime( xVal ) // <-- INJEÇÃO: Conversor Universal de Data e Hora
-               
-            ELSEIF cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER
-               xVal := Val( xVal )
-            
-            ELSEIF cType == HB_FT_MEMO .OR. cType == HB_FT_OLE
-               // Isola o ID interno do Firebird[cite: 17]
-               IF ValType( xVal ) == "C" .AND. Len( xVal ) == 8
-                  xVal := { "FB_BLOB", xVal }
-               ENDIF   
-               
-            ENDIF
-         ENDIF
-         aRow[ i ] := xVal
-      NEXT
-      AAdd( aWAData[ AREA_CACHE ], aRow )
-      RETURN .T.
-   ENDIF
-   
-   aWAData[ AREA_FETCHED_EOF ] := .T.
-   RETURN .F.
-
 STATIC FUNCTION FB5_CLOSE( nWA )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
+   IF !Empty( aWAData[ AREA_ROWBUF ] ) .AND. FB5_FLUSH( nWA ) != SUCCESS
+      RETURN FAILURE
+   ENDIF
    IF !Empty( aWAData[ AREA_QUERY ] )
       FBFree( aWAData[ AREA_QUERY ] )
       aWAData[ AREA_QUERY ] := NIL
    ENDIF
-   aWAData[ AREA_CACHE ]  := {}; aWAData[ AREA_ROWBUF ] := NIL
+   aWAData[ AREA_CACHE ]  := {}
+   aWAData[ AREA_ROWBUF ] := NIL
+   aWAData[ AREA_DIRTY ]  := NIL
    RETURN UR_SUPER_CLOSE( nWA )
 
 STATIC FUNCTION FB5_GETVALUE( nWA, nField, xValue )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
    LOCAL cType   := aWAData[ AREA_TYPES ][ nField ]
-   LOCAL xRaw
+   LOCAL xRaw, xCached
 
-   IF aWAData[ AREA_APPEND ] .AND. !Empty( aWAData[ AREA_ROWBUF ] )
+   IF !Empty( aWAData[ AREA_ROWBUF ] )
       xRaw := aWAData[ AREA_ROWBUF ][ nField ]
    ELSEIF aWAData[ AREA_RECNO ] > 0 .AND. aWAData[ AREA_RECNO ] <= Len( aWAData[ AREA_CACHE ] )
+      xCached := aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ] ]
+      IF !HB_ISARRAY( xCached )
+         IF !FB5_HydrateRow( nWA, aWAData[ AREA_RECNO ] ); RETURN FAILURE; ENDIF
+      ELSEIF Len( xCached ) == 2 .AND. xCached[ 1 ] == "FB5_PK"
+         IF !FB5_HydrateRow( nWA, aWAData[ AREA_RECNO ] ); RETURN FAILURE; ENDIF
+      ENDIF
       xRaw := aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ], nField ]
    ENDIF
 
@@ -419,17 +446,22 @@ STATIC FUNCTION FB5_PUTVALUE( nWA, nField, xValue )
 
    IF Empty( aWAData[ AREA_ROWBUF ] )
       IF aWAData[ AREA_RECNO ] > 0 .AND. aWAData[ AREA_RECNO ] <= Len( aWAData[ AREA_CACHE ] )
+         IF !FB5_HydrateRow( nWA, aWAData[ AREA_RECNO ] ); RETURN FAILURE; ENDIF
          aWAData[ AREA_ROWBUF ] := AClone( aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ] ] )
       ELSE
          aWAData[ AREA_ROWBUF ] := Array( Len( aWAData[ AREA_FIELDS ] ) )
       ENDIF
+      aWAData[ AREA_DIRTY ] := Array( Len( aWAData[ AREA_FIELDS ] ) )
    ENDIF
    aWAData[ AREA_ROWBUF ][ nField ] := xValue
+   aWAData[ AREA_DIRTY ][ nField ] := .T.
    RETURN SUCCESS
 
 STATIC FUNCTION FB5_SKIP( nWA, nRecords )
    LOCAL aWAData := USRRDD_AREADATA( nWA ), nNewRec
-   IF !Empty( aWAData[ AREA_ROWBUF ] ); FB5_FLUSH( nWA ); ENDIF
+   IF !Empty( aWAData[ AREA_ROWBUF ] ) .AND. FB5_FLUSH( nWA ) != SUCCESS
+      RETURN FAILURE
+   ENDIF
 
    nNewRec := aWAData[ AREA_RECNO ] + nRecords
 
@@ -451,8 +483,8 @@ STATIC FUNCTION FB5_SKIP( nWA, nRecords )
       aWAData[ AREA_RECNO ] := nNewRec
       aWAData[ AREA_BOF ] := .F.
       aWAData[ AREA_EOF ] := .F.
-      // Hidrata a linha para que os dados fiem disponíveis imediatamente
-      FB5_HydrateRow( nWA, aWAData[ AREA_RECNO ] )
+      // Hidrata a linha para que os dados fiem disponï¿½veis imediatamente
+      IF !FB5_HydrateRow( nWA, aWAData[ AREA_RECNO ] ); RETURN FAILURE; ENDIF
    ENDIF
    
    RETURN SUCCESS
@@ -462,7 +494,9 @@ STATIC FUNCTION FB5_GOTOP( nWA ); RETURN FB5_GOTO( nWA, 1 )
 
 STATIC FUNCTION FB5_GOBOTTOM( nWA )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
-   WHILE !aWAData[ AREA_FETCHED_EOF ]; FB5_FETCH_NEXT( nWA ); ENDDO
+   IF !Empty( aWAData[ AREA_ROWBUF ] ) .AND. FB5_FLUSH( nWA ) != SUCCESS
+      RETURN FAILURE
+   ENDIF
    RETURN FB5_GOTO( nWA, Len( aWAData[ AREA_CACHE ] ) )
 
 STATIC FUNCTION FB5_GOTOID( nWA, nRecord ); RETURN FB5_GOTO( nWA, nRecord )
@@ -470,14 +504,16 @@ STATIC FUNCTION FB5_GOTOID( nWA, nRecord ); RETURN FB5_GOTO( nWA, nRecord )
 
 STATIC FUNCTION FB5_GOTO( nWA, nRecord )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
-   IF !Empty( aWAData[ AREA_ROWBUF ] ); FB5_FLUSH( nWA ); ENDIF
+   IF !Empty( aWAData[ AREA_ROWBUF ] ) .AND. FB5_FLUSH( nWA ) != SUCCESS
+      RETURN FAILURE
+   ENDIF
    
    IF nRecord >= 1 .AND. nRecord <= Len( aWAData[ AREA_CACHE ] )
       aWAData[ AREA_RECNO ] := nRecord
       aWAData[ AREA_EOF ] := .F.
       aWAData[ AREA_BOF ] := .F.
       // Hidrata a linha alvo sob demanda
-      FB5_HydrateRow( nWA, nRecord )
+      IF !FB5_HydrateRow( nWA, nRecord ); RETURN FAILURE; ENDIF
    ENDIF
    
    RETURN SUCCESS
@@ -494,7 +530,11 @@ STATIC FUNCTION FB5_RECID( nWA, nRecNo ); nRecNo := USRRDD_AREADATA( nWA )[ AREA
 STATIC FUNCTION FB5_APPEND( nWA, nRecords )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
    HB_SYMBOL_UNUSED( nRecords )
+   IF !Empty( aWAData[ AREA_ROWBUF ] ) .AND. FB5_FLUSH( nWA ) != SUCCESS
+      RETURN FAILURE
+   ENDIF
    aWAData[ AREA_ROWBUF ] := Array( Len( aWAData[ AREA_FIELDS ] ) )
+   aWAData[ AREA_DIRTY ]  := Array( Len( aWAData[ AREA_FIELDS ] ) )
    aWAData[ AREA_APPEND ] := .T.; aWAData[ AREA_EOF ] := .T.
    RETURN SUCCESS
 
@@ -502,8 +542,8 @@ STATIC FUNCTION FB5_FLUSH( nWA )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
    LOCAL db      := aWAData[ AREA_CONN ][ 1 ]
    LOCAL dialect := aWAData[ AREA_CONN ][ 2 ]
-   LOCAL cSql, cFields, cValues, cWhere, i, nPosPK, oError, qryIns, nErr
-   LOCAL lHasChanges
+   LOCAL cSql, cFields, cValues, cWhere, i, nPosPK, oError, qryIns, nErr, nFetch
+   LOCAL lHasChanges, nSqlType, nSqlSubType
 
    IF !Empty( aWAData[ AREA_ROWBUF ] )
       IF aWAData[ AREA_APPEND ]
@@ -511,40 +551,57 @@ STATIC FUNCTION FB5_FLUSH( nWA )
          cValues := ""
          
          FOR i := 1 TO Len( aWAData[ AREA_FIELDS ] )
-            IF aWAData[ AREA_ROWBUF ][ i ] != NIL
-               // Lógica segura: só coloca vírgula se já existir algo na string
+            IF aWAData[ AREA_DIRTY ][ i ] == .T.
+               // Lï¿½gica segura: sï¿½ coloca vï¿½rgula se jï¿½ existir algo na string
                IF !( cFields == "" )
                   cFields += ", "
                   cValues += ", "
                ENDIF
                cFields += aWAData[ AREA_FIELDS ][ i ]
-               cValues += FB5_ValToSql( aWAData[ AREA_ROWBUF ][ i ] )
+               cValues += FB5_ValToSql( aWAData[ AREA_ROWBUF ][ i ], ;
+                                        aWAData[ AREA_SQLTYPES ][ i ], ;
+                                        aWAData[ AREA_SQLSUBTYPES ][ i ] )
             ENDIF
          NEXT
          
-         // Proteção: Se nenhum campo foi preenchido, abortar inserção vazia para não dar erro de sintaxe SQL
+         // Use server defaults when APPEND BLANK did not assign any field.
          IF Empty( cFields )
-            RETURN SUCCESS
+            cSql := "INSERT INTO " + aWAData[ AREA_TABLE ] + " DEFAULT VALUES"
+         ELSE
+            cSql := "INSERT INTO " + aWAData[ AREA_TABLE ] + " (" + cFields + ") VALUES (" + cValues + ")"
          ENDIF
          
-         cSql := "INSERT INTO " + aWAData[ AREA_TABLE ] + " (" + cFields + ") VALUES (" + cValues + ")"
-         
          IF !Empty( aWAData[ AREA_PK ] )
-            cSql += " RETURNING " + aWAData[ AREA_PK ][ 1 ]
+            cSql += " RETURNING "
+            FOR i := 1 TO Len( aWAData[ AREA_PK ] )
+               IF i > 1; cSql += ", "; ENDIF
+               cSql += aWAData[ AREA_PK ][ i ]
+            NEXT
          ENDIF
          
          IF "RETURNING" $ cSql
              qryIns := FBQuery( db, cSql, dialect )
              IF HB_ISARRAY( qryIns )
-                IF FBFetch( qryIns ) == 0
-                   nPosPK := AScan( aWAData[ AREA_FIELDS ], aWAData[ AREA_PK ][ 1 ] )
-                   IF nPosPK > 0
-                      aWAData[ AREA_ROWBUF ][ nPosPK ] := Val( FBGetData( qryIns, 1 ) )
-                   ENDIF
+                nFetch := FBFetch( qryIns )
+                IF nFetch == 0
+                   FOR i := 1 TO Len( aWAData[ AREA_PK ] )
+                      nPosPK := AScan( aWAData[ AREA_FIELDS ], aWAData[ AREA_PK ][ i ] )
+                      IF nPosPK > 0
+                         aWAData[ AREA_ROWBUF ][ nPosPK ] := FBGetData( qryIns, i )
+                      ENDIF
+                   NEXT
+                ELSE
+                   FBFree( qryIns )
+                   oError := ErrorNew()
+                   oError:GenCode := EG_WRITE
+                   oError:Description := "FB5RDD: Falha ao obter a chave gerada - " + FBError( nFetch )
+                   oError:Operation := cSql
+                   UR_SUPER_ERROR( nWA, oError )
+                   RETURN FAILURE
                 ENDIF
                 FBFree( qryIns )
              ELSE
-                // Tratamento rigoroso se a Query de inserção falhar
+                // Tratamento rigoroso se a Query de inserï¿½ï¿½o falhar
                 oError := ErrorNew()
                 oError:GenCode := EG_WRITE
                 oError:Description := "FB5RDD: Falha no INSERT (RETURNING) - " + FBError( qryIns )
@@ -555,7 +612,7 @@ STATIC FUNCTION FB5_FLUSH( nWA )
          ELSE
              nErr := FBExecute( db, cSql, dialect )
              IF nErr < 0
-                // Tratamento rigoroso se a Execução de inserção falhar
+                // Tratamento rigoroso se a Execuï¿½ï¿½o de inserï¿½ï¿½o falhar
                 oError := ErrorNew()
                 oError:GenCode := EG_WRITE
                 oError:Description := "FB5RDD: Falha no INSERT - " + FBError( nErr )
@@ -565,7 +622,7 @@ STATIC FUNCTION FB5_FLUSH( nWA )
              ENDIF
          ENDIF
 
-      ELSE // Início da Lógica de UPDATE
+      ELSE // Inï¿½cio da Lï¿½gica de UPDATE
 
          IF Empty( aWAData[ AREA_PK ] )
             oError := ErrorNew()
@@ -579,18 +636,22 @@ STATIC FUNCTION FB5_FLUSH( nWA )
          lHasChanges := .F.
          
          FOR i := 1 TO Len( aWAData[ AREA_FIELDS ] )
-            IF aWAData[ AREA_ROWBUF ][ i ] != NIL
+            IF aWAData[ AREA_DIRTY ][ i ] == .T.
                IF lHasChanges
                   cSql += ", "
                ENDIF
-               cSql += aWAData[ AREA_FIELDS ][ i ] + " = " + FB5_ValToSql( aWAData[ AREA_ROWBUF ][ i ] )
+               nSqlType := aWAData[ AREA_SQLTYPES ][ i ]
+               nSqlSubType := aWAData[ AREA_SQLSUBTYPES ][ i ]
+               cSql += aWAData[ AREA_FIELDS ][ i ] + " = " + ;
+                       FB5_ValToSql( aWAData[ AREA_ROWBUF ][ i ], nSqlType, nSqlSubType )
                lHasChanges := .T.
             ENDIF
          NEXT
          
-         // Proteção: Se nenhum campo mudou, não há o que atualizar no banco
+         // Proteï¿½ï¿½o: Se nenhum campo mudou, nï¿½o hï¿½ o que atualizar no banco
          IF !lHasChanges
             aWAData[ AREA_ROWBUF ] := NIL
+            aWAData[ AREA_DIRTY ] := NIL
             RETURN SUCCESS
          ENDIF
          
@@ -602,7 +663,10 @@ STATIC FUNCTION FB5_FLUSH( nWA )
                   cWhere += " AND "
                ENDIF
                // Procura a Chave no Cache (o valor original, caso a PK tenha sido o campo alterado acidentalmente)
-               cWhere += aWAData[ AREA_PK ][ i ] + " = " + FB5_ValToSql( aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ], nPosPK ] )
+               cWhere += aWAData[ AREA_PK ][ i ] + " = " + ;
+                         FB5_ValToSql( aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ], nPosPK ], ;
+                                       aWAData[ AREA_SQLTYPES ][ nPosPK ], ;
+                                       aWAData[ AREA_SQLSUBTYPES ][ nPosPK ] )
             ENDIF
          NEXT
          
@@ -610,7 +674,7 @@ STATIC FUNCTION FB5_FLUSH( nWA )
          
          nErr := FBExecute( db, cSql, dialect )
          IF nErr < 0
-            // Aborta a operação em caso de falha (ex: violação de Unique Key no Update)
+            // Aborta a operaï¿½ï¿½o em caso de falha (ex: violaï¿½ï¿½o de Unique Key no Update)
             oError := ErrorNew()
             oError:GenCode := EG_WRITE
             oError:Description := "FB5RDD: Falha no UPDATE - " + FBError( nErr )
@@ -620,17 +684,20 @@ STATIC FUNCTION FB5_FLUSH( nWA )
          ENDIF
       ENDIF
 
-      // Esta secção só é alcançada se a base de dados confirmar a gravação com sucesso.
-      // Atualizamos agora a memória/cache do Harbour.
+      // Esta secï¿½ï¿½o sï¿½ ï¿½ alcanï¿½ada se a base de dados confirmar a gravaï¿½ï¿½o com sucesso.
+      // Atualizamos agora a memï¿½ria/cache do Harbour.
       IF aWAData[ AREA_APPEND ]
          AAdd( aWAData[ AREA_CACHE ], AClone( aWAData[ AREA_ROWBUF ] ) )
          aWAData[ AREA_APPEND ] := .F.
          aWAData[ AREA_RECNO ]  := Len( aWAData[ AREA_CACHE ] )
+         aWAData[ AREA_EOF ] := .F.
+         aWAData[ AREA_BOF ] := .F.
       ELSE
          aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ] ] := AClone( aWAData[ AREA_ROWBUF ] )
       ENDIF
       
       aWAData[ AREA_ROWBUF ] := NIL
+      aWAData[ AREA_DIRTY ]  := NIL
    ENDIF
    
    RETURN SUCCESS
@@ -650,13 +717,17 @@ STATIC FUNCTION FB5_FLUSH( nWA )
    ENDIF
 
    IF aWAData[ AREA_RECNO ] > 0 .AND. aWAData[ AREA_RECNO ] <= Len( aWAData[ AREA_CACHE ] )
+      IF !FB5_HydrateRow( nWA, aWAData[ AREA_RECNO ] ); RETURN FAILURE; ENDIF
       FOR i := 1 TO Len( aWAData[ AREA_PK ] )
          nPosPK := AScan( aWAData[ AREA_FIELDS ], aWAData[ AREA_PK ][ i ] )
          IF nPosPK > 0
             IF i > 1
                cWhere += " AND "
             ENDIF
-            cWhere += aWAData[ AREA_PK ][ i ] + " = " + FB5_ValToSql( aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ], nPosPK ] )
+            cWhere += aWAData[ AREA_PK ][ i ] + " = " + ;
+                      FB5_ValToSql( aWAData[ AREA_CACHE ][ aWAData[ AREA_RECNO ], nPosPK ], ;
+                                    aWAData[ AREA_SQLTYPES ][ nPosPK ], ;
+                                    aWAData[ AREA_SQLSUBTYPES ][ nPosPK ] )
          ENDIF
       NEXT
       
@@ -664,7 +735,7 @@ STATIC FUNCTION FB5_FLUSH( nWA )
       
       nErr := FBExecute( db, cSql, dialect )
       IF nErr < 0
-         // Impede que o RDD elimine do ecrã um registo que falhou na base de dados (ex: restrição relacional)
+         // Impede que o RDD elimine do ecrï¿½ um registo que falhou na base de dados (ex: restriï¿½ï¿½o relacional)
          oError := ErrorNew()
          oError:GenCode := EG_WRITE
          oError:Description := "FB5RDD: Falha no DELETE - " + FBError( nErr )
@@ -673,9 +744,12 @@ STATIC FUNCTION FB5_FLUSH( nWA )
          RETURN FAILURE
       ENDIF
       
-      // Eliminação confirmada no Firebird, podemos remover do Cache do Harbour
+      // Eliminaï¿½ï¿½o confirmada no Firebird, podemos remover do Cache do Harbour
       ADel( aWAData[ AREA_CACHE ], aWAData[ AREA_RECNO ] )
       ASize( aWAData[ AREA_CACHE ], Len( aWAData[ AREA_CACHE ] ) - 1 )
+      aWAData[ AREA_ROWBUF ] := NIL
+      aWAData[ AREA_DIRTY ] := NIL
+      aWAData[ AREA_APPEND ] := .F.
       
       IF aWAData[ AREA_RECNO ] > Len( aWAData[ AREA_CACHE ] )
          aWAData[ AREA_EOF ] := .T.
@@ -686,16 +760,55 @@ STATIC FUNCTION FB5_FLUSH( nWA )
    
    
 
-STATIC FUNCTION FB5_ValToSql( xField )
+STATIC FUNCTION FB5_ValToSql( xField, nSqlType, nSqlSubType )
+   LOCAL nSeconds, nMillis, cTime
+
+   hb_default( @nSqlType, 0 )
+   hb_default( @nSqlSubType, 0 )
+
    SWITCH ValType( xField )
-   CASE "C"; CASE "M"; RETURN "'" + StrTran( xField, "'", "''" ) + "'"
+   CASE "C"
+   CASE "M"
+      IF nSqlType == IB_SQL_BLOB
+         RETURN "CAST(X'" + hb_StrToHex( xField ) + "' AS BLOB SUB_TYPE " + ;
+                AllTrim( Str( nSqlSubType ) ) + ")"
+      ENDIF
+      RETURN "'" + StrTran( xField, "'", "''" ) + "'"
    CASE "D"
       IF Empty( xField ); RETURN "NULL"; ENDIF
-      RETURN "'" + StrZero( Year( xField ), 4 ) + "-" + StrZero( Month( xField ), 2 ) + "-" + StrZero( Day( xField ), 2 ) + "'"
-   CASE "N"; RETURN Str( xField )
+      RETURN "DATE '" + StrZero( Year( xField ), 4 ) + "-" + ;
+             StrZero( Month( xField ), 2 ) + "-" + StrZero( Day( xField ), 2 ) + "'"
+   CASE "N"; RETURN hb_ntos( xField )
    CASE "L"; RETURN iif( xField, "TRUE", "FALSE" )
+   CASE "T"
+      IF Empty( xField ) .AND. nSqlType != IB_SQL_TYPE_TIME
+         RETURN "NULL"
+      ENDIF
+      nSeconds := Int( hb_Sec( xField ) )
+      nMillis  := Min( 999, Int( ( hb_Sec( xField ) - nSeconds ) * 1000 + 0.5 ) )
+      cTime := StrZero( hb_Hour( xField ), 2 ) + ":" + ;
+               StrZero( hb_Minute( xField ), 2 ) + ":" + ;
+               StrZero( nSeconds, 2 ) + "." + StrZero( nMillis, 3 )
+      IF nSqlType == IB_SQL_TYPE_TIME
+         RETURN "TIME '" + cTime + "'"
+      ELSEIF nSqlType == IB_SQL_TIMESTAMP
+         RETURN "TIMESTAMP '" + StrZero( Year( xField ), 4 ) + "-" + ;
+                StrZero( Month( xField ), 2 ) + "-" + StrZero( Day( xField ), 2 ) + ;
+                " " + cTime + "'"
+      ENDIF
+      RETURN "'" + StrZero( Year( xField ), 4 ) + "-" + ;
+             StrZero( Month( xField ), 2 ) + "-" + StrZero( Day( xField ), 2 ) + ;
+             " " + cTime + "'"
    ENDSWITCH
    RETURN "NULL"
+
+STATIC FUNCTION FB5_ToNumber( xValue )
+   IF HB_ISNUMERIC( xValue )
+      RETURN xValue
+   ELSEIF ValType( xValue ) == "C"
+      RETURN Val( xValue )
+   ENDIF
+   RETURN 0
    
 STATIC FUNCTION FB5_RDDINFO( nIndex, cargo )
    LOCAL xRet := NIL
@@ -718,7 +831,7 @@ RETURN xRet
 
 STATIC FUNCTION FB5_CREATE( nWA, aOpenInfo )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
-   LOCAL db, dialect, cSql, n //, nRes oError,
+   LOCAL db, dialect, cSql, n, nErr, oError
    LOCAL cTableName := AllTrim( aOpenInfo[ UR_OI_NAME ] ), aStruct := aWAData[ AREA_STRUCT ] 
    LOCAL mFldNm, mFldType, mFldLen, mFldDec
 
@@ -728,6 +841,14 @@ STATIC FUNCTION FB5_CREATE( nWA, aOpenInfo )
    ELSEIF Len( s_aConnections ) > 0
       db := s_aConnections[ Len( s_aConnections ) ][ 1 ]
       dialect := s_aConnections[ Len( s_aConnections ) ][ 2 ]
+   ENDIF
+
+   IF Empty( db )
+      oError := ErrorNew()
+      oError:GenCode := EG_CREATE
+      oError:Description := "FB5RDD: Nenhuma conexao Firebird ativa para criar a tabela."
+      UR_SUPER_ERROR( nWA, oError )
+      RETURN FAILURE
    ENDIF
 
    cSql := "CREATE TABLE " + cTableName + " ("
@@ -746,6 +867,8 @@ STATIC FUNCTION FB5_CREATE( nWA, aOpenInfo )
          CASE mFldType == HB_FT_STRING .OR. mFldType == "C"
             cSql += "VARCHAR(" + LTrim( Str( mFldLen ) ) + ")"
          CASE mFldType == HB_FT_DATE .OR. mFldType == "D"
+            cSql += "DATE"
+         CASE mFldType == HB_FT_TIMESTAMP .OR. mFldType == "T"
             cSql += "TIMESTAMP"
          CASE mFldType == HB_FT_LONG .OR. mFldType == HB_FT_INTEGER .OR. mFldType == "N"
             IF mFldDec > 0
@@ -754,6 +877,12 @@ STATIC FUNCTION FB5_CREATE( nWA, aOpenInfo )
                IF mFldLen <= 4; cSql += "SMALLINT"
                ELSEIF mFldLen <= 9; cSql += "INTEGER"
                ELSE; cSql += "BIGINT"; ENDIF
+            ENDIF
+         CASE mFldType == HB_FT_DOUBLE .OR. mFldType == "F"
+            IF mFldDec > 0
+               cSql += "DECIMAL(" + LTrim( Str( mFldLen ) ) + "," + LTrim( Str( mFldDec ) ) + ")"
+            ELSE
+               cSql += "DOUBLE PRECISION"
             ENDIF
          CASE mFldType == HB_FT_LOGICAL .OR. mFldType == "L"
             cSql += "SMALLINT DEFAULT 0 NOT NULL"
@@ -766,27 +895,48 @@ STATIC FUNCTION FB5_CREATE( nWA, aOpenInfo )
       ENDCASE
    NEXT
    cSql += ")"
-   FBExecute( db, cSql, dialect )
+   nErr := FBExecute( db, cSql, dialect )
+   IF nErr < 0
+      oError := ErrorNew()
+      oError:GenCode := EG_CREATE
+      oError:Description := "FB5RDD: Falha ao criar a tabela - " + FBError( nErr )
+      oError:Operation := cSql
+      UR_SUPER_ERROR( nWA, oError )
+      RETURN FAILURE
+   ENDIF
    RETURN SUCCESS
 
 STATIC FUNCTION FB5_HydrateRow( nWA, nRecNo )
    LOCAL aWAData := USRRDD_AREADATA( nWA )
    LOCAL db      := aWAData[ AREA_CONN ][ 1 ]
    LOCAL dialect := aWAData[ AREA_CONN ][ 2 ]
-   LOCAL cPkVal  := aWAData[ AREA_CACHE ][ nRecNo ]
-   LOCAL cSql, qryRow, nCols, aRow, i, xVal, cType
+   LOCAL xCache  := aWAData[ AREA_CACHE ][ nRecNo ]
+   LOCAL aPk, cWhere := "", cSql, qryRow, nCols, aRow, i, xVal, cType, nPosPK, nFetch, oError
 
-   // Se o cache desta posição já for um array com os dados completos, não faz nova query
-   IF HB_ISARRAY( cPkVal )
+   IF !HB_ISARRAY( xCache )
+      RETURN .T.
+   ENDIF
+   IF Len( xCache ) != 2 .OR. xCache[ 1 ] != "FB5_PK"
       RETURN .T.
    ENDIF
 
-   // Monta o select cirúrgico para buscar apenas este registo pela PK
-   cSql := "SELECT * FROM " + aWAData[ AREA_TABLE ] + " WHERE " + aWAData[ AREA_PK ][ 1 ] + " = " + FB5_ValToSql( cPkVal )
+   aPk := xCache[ 2 ]
+   FOR i := 1 TO Len( aWAData[ AREA_PK ] )
+      nPosPK := AScan( aWAData[ AREA_FIELDS ], aWAData[ AREA_PK ][ i ] )
+      IF nPosPK > 0
+         IF !Empty( cWhere ); cWhere += " AND "; ENDIF
+         cWhere += aWAData[ AREA_PK ][ i ] + " = " + ;
+                   FB5_ValToSql( aPk[ i ], aWAData[ AREA_SQLTYPES ][ nPosPK ], ;
+                                 aWAData[ AREA_SQLSUBTYPES ][ nPosPK ] )
+      ENDIF
+   NEXT
+
+   cSql := "SELECT * FROM " + aWAData[ AREA_TABLE ] + " WHERE " + cWhere
    qryRow := FBQuery( db, cSql, dialect )
 
    IF HB_ISARRAY( qryRow )
-      IF FBFetch( qryRow ) == 0
+      nFetch := FBFetch( qryRow )
+      IF nFetch == 0
          nCols := qryRow[ 4 ]
          aRow  := Array( nCols )
          
@@ -800,6 +950,7 @@ STATIC FUNCTION FB5_HydrateRow( nWA, nRecNo )
                   CASE cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER; xVal := 0
                   CASE cType == HB_FT_LOGICAL; xVal := .F.
                   CASE cType == HB_FT_DATE; xVal := CToD("")
+                  CASE cType == HB_FT_TIMESTAMP; xVal := hb_DateTime( 0, 0, 0 )
                ENDCASE
             ELSE
                IF cType == HB_FT_LOGICAL
@@ -807,10 +958,10 @@ STATIC FUNCTION FB5_HydrateRow( nWA, nRecNo )
               ELSEIF cType == HB_FT_DATE
                   xVal := StrDateRdd( xVal )
                ELSEIF cType == HB_FT_TIMESTAMP
-                  xVal := UniversalDateTime( xVal ) // <-- INJEÇÃO: Conversor Universal de Data e Hora
+                  xVal := UniversalDateTime( xVal ) // <-- INJEï¿½ï¿½O: Conversor Universal de Data e Hora
                   
                ELSEIF cType == HB_FT_DOUBLE .OR. cType == HB_FT_LONG .OR. cType == HB_FT_INTEGER
-                  xVal := Val( xVal )
+                  xVal := FB5_ToNumber( xVal )
                ELSEIF cType == HB_FT_MEMO .OR. cType == HB_FT_OLE
                   IF ValType( xVal ) == "C" .AND. Len( xVal ) == 8
                      xVal := { "FB_BLOB", xVal }
@@ -826,8 +977,20 @@ STATIC FUNCTION FB5_HydrateRow( nWA, nRecNo )
          RETURN .T.
       ENDIF
       FBFree( qryRow )
+      oError := ErrorNew()
+      oError:GenCode := EG_READ
+      oError:Description := "FB5RDD: Falha ao buscar registro pela chave primaria."
+      oError:Operation := cSql
+      IF nFetch != -1
+         oError:Description += " " + FBError( nFetch )
+      ENDIF
+   ELSE
+      oError := ErrorNew()
+      oError:GenCode := EG_READ
+      oError:Description := "FB5RDD: Falha ao consultar registro pela chave primaria - " + FBError( qryRow )
+      oError:Operation := cSql
    ENDIF
-   
+   UR_SUPER_ERROR( nWA, oError )
    RETURN .F.
 
 FUNCTION FB5RDD_GETFUNCTABLE( pFuncCount, pFuncTable, pSuperTable, nRddID )
@@ -913,7 +1076,7 @@ FUNCTION FB5_GravarBlobJpg( cCampo, cDir )
    
  // +--------------------------------------------------------------------
 // +    Static Function strlogicrdd( cVAL, lDEFAULT )
-// +    Conversor universal de retornos textuais/numéricos para Booleano
+// +    Conversor universal de retornos textuais/numï¿½ricos para Booleano
 // +--------------------------------------------------------------------
 STATIC FUNCTION strlogicrdd( cVAL, lDEFAULT )
 
@@ -975,7 +1138,7 @@ LOCAL dRet := CToD( "" )
       RETURN dRet
    ENDIF
    
-   // Limpa uma única vez para otimizar os testes
+   // Limpa uma ï¿½nica vez para otimizar os testes
    cCleanData := Upper( AllTrim( xData ) )
 
    // Barreira imediata contra literais nulos/vazios
@@ -986,7 +1149,7 @@ LOCAL dRet := CToD( "" )
    cTemp := AllTrim( xData )
 
    // -------------------------------------------------------------------------
-   // Suporte a Formatos HTTP-date e Logs (Inglês e Português)
+   // Suporte a Formatos HTTP-date e Logs (Inglï¿½s e Portuguï¿½s)
    // -------------------------------------------------------------------------
    cTemp := StrTran( cTemp, ",", " " )
    cTemp := StrTran( cTemp, "-", " " )
@@ -1001,19 +1164,19 @@ LOCAL dRet := CToD( "" )
       FOR i := 1 TO Len( aParts )
          cMesStr := Upper( Left( aParts[ i ], 3 ) )
          
-         // 1. Busca primeiro em Inglês
+         // 1. Busca primeiro em Inglï¿½s
          nMes := AScan( aMonthsEN, cMesStr )
          
-         // 2. Se não encontrar, tenta em Português
+         // 2. Se nï¿½o encontrar, tenta em Portuguï¿½s
          IF nMes == 0
             nMes := AScan( aMonthsPT, cMesStr )
          ENDIF
          
-         // Se encontrou o mês, processa
+         // Se encontrou o mï¿½s, processa
          IF nMes > 0
             cMes := StrZero( nMes, 2 )
             
-            // Extrai o Dia e o Ano baseado na posição do Mês (ANSI C vs RFC)
+            // Extrai o Dia e o Ano baseado na posiï¿½ï¿½o do Mï¿½s (ANSI C vs RFC)
             IF i == 2 .AND. Len( aParts ) >= 5 // ANSI C asctime
                cDia := StrZero( Val( aParts[ 3 ] ), 2 )
                cAno := aParts[ 5 ]
@@ -1088,9 +1251,9 @@ RETURN dRet
 
 
  // +--------------------------------------------------------------------
-// +  Função: UniversalDateTime
-// +  Objetivo: Tratar datas complexas mantendo e corrigindo o horário
-// +  Retorna: Timestamp nativo (T) de alta precisão
+// +  Funï¿½ï¿½o: UniversalDateTime
+// +  Objetivo: Tratar datas complexas mantendo e corrigindo o horï¿½rio
+// +  Retorna: Timestamp nativo (T) de alta precisï¿½o
 // +--------------------------------------------------------------------
 STATIC FUNCTION UniversalDateTime( xData )
 
@@ -1098,19 +1261,19 @@ STATIC FUNCTION UniversalDateTime( xData )
    LOCAL cTime := "00:00:00"
    LOCAL nHour := 0, nMin := 0, nSec := 0
 
-   // 1. Já é Data ou Timestamp? Trata a conversão direta
+   // 1. Jï¿½ ï¿½ Data ou Timestamp? Trata a conversï¿½o direta
    IF ValType( xData ) == "T"
       RETURN xData
    ELSEIF ValType( xData ) == "D"
       RETURN hb_DateTime( Year(xData), Month(xData), Day(xData) )
    ENDIF
 
-   // 2. Barreira para nulos ou variáveis não suportadas
+   // 2. Barreira para nulos ou variï¿½veis nï¿½o suportadas
    IF ValType( xData ) <> "C" .OR. Empty( xData )
       RETURN hb_DateTime( 0, 0, 0 )
    ENDIF
 
-   // 3. Limpa espaços e conserta erros como ";" ou tags ISO "T"
+   // 3. Limpa espaï¿½os e conserta erros como ";" ou tags ISO "T"
    cStr := AllTrim( xData )
    cStr := StrTran( cStr, ";", ":" )
    cStr := StrTran( cStr, "T", " " )
@@ -1118,18 +1281,18 @@ STATIC FUNCTION UniversalDateTime( xData )
    aParts := hb_ATokens( cStr, " " )
    cDataLimpa := ""
 
-   // 4. Caçador de Horários
+   // 4. Caï¿½ador de Horï¿½rios
    FOR i := 1 TO Len( aParts )
       IF ":" $ aParts[i] .AND. Val( StrTran( aParts[i], ":", "" ) ) >= 0
          cTime := aParts[i] // Isola apenas a hora encontrada
       ELSE
-         cDataLimpa += aParts[i] + " " // Reconstrói string base só da data
+         cDataLimpa += aParts[i] + " " // Reconstrï¿½i string base sï¿½ da data
       ENDIF
    NEXT
 
    cDataLimpa := AllTrim( cDataLimpa )
    
-   // 5. Utiliza o motor otimizado para extrair o calendário válido
+   // 5. Utiliza o motor otimizado para extrair o calendï¿½rio vï¿½lido
    dData := StrDaterdd( cDataLimpa )
 
    // Fallback se a rotina retornar vazio, checa direto via Harbour CToD
@@ -1141,7 +1304,7 @@ STATIC FUNCTION UniversalDateTime( xData )
       RETURN hb_DateTime( 0, 0, 0 )
    ENDIF
 
-   // 6. Separa e converte as partes do Horário
+   // 6. Separa e converte as partes do Horï¿½rio
    aParts := hb_ATokens( cTime, ":" )
    IF Len( aParts ) >= 1; nHour := Val( aParts[1] ); ENDIF
    IF Len( aParts ) >= 2; nMin  := Val( aParts[2] ); ENDIF
