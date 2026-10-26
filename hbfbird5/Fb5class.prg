@@ -1,3 +1,30 @@
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Programa  : Fb5class.prg
+*+
+*+
+*+
+*+     Sistema:
+*+
+*+     Linguagem: Harbour
+*+
+*+     Autor: jcassiano
+*+
+*+     Copyright (c) 2024,  jcassiano
+*+
+*+     
+*+
+*+
+*+
+*+    Documentado em 26-Out-2026 as  4:25 pm
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+
 /*
  * Firebird RDBMS low-level (client API) interface code for Firebird 5.
  * Adapted for Harbour Project (Fb5class - Vers�o Final Otimizada)
@@ -11,19 +38,47 @@
 THREAD STATIC t_lLoadMemos := .T.
 THREAD STATIC t_lLoadBlobs := .T.
 
-FUNCTION FBClass_SetLoadBlobs( lLoad )
-   LOCAL lOld := t_lLoadBlobs
-   IF HB_ISLOGICAL( lLoad )
-      t_lLoadBlobs := lLoad
-   ENDIF
-   RETURN lOld
 
-FUNCTION FBClass_SetLoadMemos( lLoad )
-   LOCAL lOld := t_lLoadMemos
-   IF HB_ISLOGICAL( lLoad )
-      t_lLoadMemos := lLoad
-   ENDIF
-   RETURN lOld
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Function FBClass_SetLoadBlobs()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+FUNCTION FBClass_SetLoadBlobs(lLoad)
+
+LOCAL lOld := t_lLoadBlobs
+IF HB_ISLOGICAL(lLoad)
+   t_lLoadBlobs := lLoad
+ENDIF
+RETURN lOld
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Function FBClass_SetLoadMemos()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+FUNCTION FBClass_SetLoadMemos(lLoad)
+
+LOCAL lOld := t_lLoadMemos
+IF HB_ISLOGICAL(lLoad)
+   t_lLoadMemos := lLoad
+ENDIF
+RETURN lOld
 
 // --- Restante do c�digo original ---
 // CREATE CLASS Fb5class ...
@@ -62,1472 +117,2247 @@ CREATE CLASS Fb5class
    VAR charset
    VAR oLastError // Objeto com "Code", "Message", "SQL", "Context"
 
-   METHOD New( cServer, cUser, cPassword, nDialect, cCharSet )
+   METHOD New(cServer,cUser,cPassword,nDialect,cCharSet)
 
-   METHOD TableExists( cTable )
+   METHOD TableExists(cTable)
    METHOD ListTables()
-   METHOD TableStruct( cTable )
-   METHOD Close() 
-   METHOD Destroy() 
+   METHOD TableStruct(cTable)
+   METHOD Close()
+   METHOD Destroy()
 
    METHOD StartTransaction()
    METHOD Commit()
    METHOD Rollback()
 
-   METHOD Execute( cQuery )
-   METHOD Query( cQuery )
+   METHOD Execute(cQuery)
+   METHOD Query(cQuery)
 
-   METHOD Update( oRow, cWhere )
-   METHOD Delete( oRow, cWhere )
-   METHOD Append( oRow )
-   METHOD   GetServerInfo()
+   METHOD Update(oRow,cWhere)
+   METHOD Delete(oRow,cWhere)
+   METHOD Append(oRow)
+   METHOD GetServerInfo()
 
-   METHOD SetError( nCode, cContext, cQuery )
-   METHOD NetErr()   INLINE ::lError
-   METHOD Error()    INLINE FBError( ::nError )
-   METHOD ErrorNo()  INLINE ::nError
-   METHOD ValToSql( xField, cType ) INLINE DataToSql( xField, cType )
+   METHOD SetError(nCode,cContext,cQuery)
+   METHOD NetErr() INLINE ::lError
+   METHOD Error() INLINE FBError(::nError)
+   METHOD ErrorNo() INLINE ::nError
+   METHOD ValToSql(xField,cType) INLINE DataToSql(xField,cType)
 
 ENDCLASS
 
-METHOD New( cServer, cUser, cPassword, nDialect, cCharSet ) CLASS Fb5class
 
-   hb_default( @nDialect, IB_DIALECT_CURRENT )
-   hb_default( @cCharSet, "UTF8" )
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method New()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD New(cServer,cUser,cPassword,nDialect,cCharSet) CLASS Fb5class
 
-   ::lError := .F.
-   ::nError := 0
-   ::StartedTrans := .F.
-   ::Dialect := nDialect
-   ::charset := cCharSet
 
-   ::db := FBConnect( cServer, cUser, cPassword, ::charset )
+hb_default(@nDialect,IB_DIALECT_CURRENT)
+hb_default(@cCharSet,"UTF8")
 
-   IF HB_ISNUMERIC( ::db )
-      ::lError := .T.
-      ::nError := ::db
-   ENDIF
+::lError       := .F.
+::nError       := 0
+::StartedTrans := .F.
+::Dialect      := nDialect
+::charset      := cCharSet
 
-   RETURN Self
+::db := FBConnect(cServer,cUser,cPassword,::charset)
 
-METHOD SetError( nCode, cContext, cQuery ) CLASS Fb5class
+IF HB_ISNUMERIC(::db)
    ::lError := .T.
-   ::nError := nCode
-   
-   ::oLastError := {=>}
-   ::oLastError["Code"]    := nCode
-   ::oLastError["Message"] := FBError( nCode )
-   ::oLastError["SQL"]     := iif( cQuery == NIL, "", cQuery )
-   ::oLastError["Context"] := cContext
-   
-   RETURN .F.
+   ::nError := ::db
+ENDIF
 
+RETURN Self
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method SetError()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD SetError(nCode,cContext,cQuery) CLASS Fb5class
+
+::lError := .T.
+::nError := nCode
+
+::oLastError              := {=>}
+::oLastError[ "Code" ]    := nCode
+::oLastError[ "Message" ] := FBError(nCode)
+::oLastError[ "SQL" ]     := iif(cQuery == NIL,"",cQuery)
+::oLastError[ "Context" ] := cContext
+
+RETURN .F.
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method StartTransaction()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD StartTransaction() CLASS Fb5class
-   LOCAL result := .F.
 
-   // Impede o in�cio se j� houver transa��o ativa
-   IF ::StartedTrans
-      ::lError := .T.
-      ::nError := -1 // Ou um c�digo de erro interno customizado
-      // Aqui pode-se opcionalmente alimentar o novo objeto de erro (Fase 3)
-      RETURN .F.
-   ENDIF
+LOCAL result := .F.
 
-   ::trans := FBStartTransaction( ::db )
+// Impede o in�cio se j� houver transa��o ativa
+IF ::StartedTrans
+   ::lError := .T.
+   ::nError := - 1  // Ou um c�digo de erro interno customizado
+   // Aqui pode-se opcionalmente alimentar o novo objeto de erro (Fase 3)
+   RETURN .F.
+ENDIF
 
-   IF HB_ISNUMERIC( ::trans )
-      ::lError := .T.
-      ::nError := ::trans
-   ELSE
-      result := .T.
-      ::lError := .F.
-      ::nError := 0
-      ::StartedTrans := .T.
-   ENDIF
+::trans := FBStartTransaction(::db)
 
-   RETURN result   
-   
+IF HB_ISNUMERIC(::trans)
+   ::lError := .T.
+   ::nError := ::trans
+ELSE
+   result         := .T.
+   ::lError       := .F.
+   ::nError       := 0
+   ::StartedTrans := .T.
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Close()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD Close() CLASS Fb5class
-   IF ::StartedTrans
-      ::Rollback() // Pol�tica documentada: rollback autom�tico ao destruir sem comitar
-   ENDIF
 
-   IF !Empty( ::db )
-      FBClose( ::db )
-   ENDIF
+IF ::StartedTrans
+   ::Rollback()   // Pol�tica documentada: rollback autom�tico ao destruir sem comitar
+ENDIF
 
-   ::trans := NIL
-   ::db := NIL
-   ::StartedTrans := .F.
+IF !Empty(::db)
+   FBClose(::db)
+ENDIF
 
-   RETURN NIL
+::trans        := NIL
+::db           := NIL
+::StartedTrans := .F.
 
+RETURN NIL
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Destroy()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD Destroy() CLASS Fb5class
-   ::Close()
-   RETURN NIL   
 
+::Close()
+RETURN NIL
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Rollback()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD Rollback() CLASS Fb5class
 
-   LOCAL result := .F.
-   LOCAL n
 
-   IF ::StartedTrans
-      IF ( n := FBRollback( ::trans ) ) < 0
-        // ::lError := .T.
-        // ::nError := n
-        RETURN ::SetError( n, "Rollback()", NIL ) // <-- ATUALIZADO
-      ELSE
-         ::lError := .F.
-         ::nError := 0
-         result := .T.
-         ::StartedTrans := .F.
-      ENDIF
+LOCAL result := .F.
+LOCAL n
+
+IF ::StartedTrans
+   IF (n := FBRollback(::trans)) < 0
+      // ::lError := .T.
+      // ::nError := n
+      RETURN ::SetError(n,"Rollback()",NIL)   // <-- ATUALIZADO
+   ELSE
+      ::lError       := .F.
+      ::nError       := 0
+      result         := .T.
+      ::StartedTrans := .F.
    ENDIF
+ENDIF
 
-   RETURN result
+RETURN result
 
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Commit()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD Commit() CLASS Fb5class
 
-   LOCAL result := .F.
-   LOCAL n
 
-   IF ::StartedTrans
-      IF ( n := FBCommit( ::trans ) ) < 0
-         //::lError := .T.
-         //::nError := n
-         RETURN ::SetError( n, "Commit()", NIL ) // <-- ATUALIZADO
-      ELSE
-         ::lError := .F.
-         ::nError := 0
-         result := .T.
-         ::StartedTrans := .F.
-      ENDIF
-   ENDIF
+LOCAL result := .F.
+LOCAL n
 
-   RETURN result
-
-METHOD Execute( cQuery ) CLASS Fb5class
-
-   LOCAL result
-   LOCAL n
-
-   //cQuery := RemoveSpaces( cQuery )
-
-   IF ::StartedTrans
-      n := FBExecute( ::db, cQuery, ::dialect, ::trans )
-   ELSE
-      n := FBExecute( ::db, cQuery, ::dialect )
-   ENDIF
-
-   IF n < 0
+IF ::StartedTrans
+   IF (n := FBCommit(::trans)) < 0
       //::lError := .T.
       //::nError := n
-      //result := .F.
-      RETURN ::SetError( n, "Execute()", cQuery )
+      RETURN ::SetError(n,"Commit()",NIL)   // <-- ATUALIZADO
    ELSE
-      ::lError := .F.
-      ::nError := 0
-      result := .T.
+      ::lError       := .F.
+      ::nError       := 0
+      result         := .T.
+      ::StartedTrans := .F.
    ENDIF
+ENDIF
 
-   RETURN result
+RETURN result
 
-METHOD Query( cQuery ) CLASS Fb5class
-   RETURN TFBQuery():New( ::db, cQuery, ::dialect )
 
-METHOD TableExists( cTable ) CLASS Fb5class
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Execute()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Execute(cQuery) CLASS Fb5class
 
-   LOCAL cQuery
-   LOCAL result := .F.
-   LOCAL qry
 
-   cQuery := "select rdb$relation_name from rdb$relations where rdb$relation_name = '" + Upper( AllTrim( cTable ) ) + "'"
+LOCAL result
+LOCAL n
 
-   qry := FBQuery( ::db, cQuery, ::dialect )
+//cQuery := RemoveSpaces( cQuery )
 
-   IF HB_ISARRAY( qry )
-      result := ( FBFetch( qry ) == 0 )
-      FBFree( qry )
-   ENDIF
+IF ::StartedTrans
+   n := FBExecute(::db,cQuery,::dialect,::trans)
+ELSE
+   n := FBExecute(::db,cQuery,::dialect)
+ENDIF
 
-   RETURN result
+IF n < 0
+   //::lError := .T.
+   //::nError := n
+   //result := .F.
+   RETURN ::SetError(n,"Execute()",cQuery)
+ELSE
+   ::lError := .F.
+   ::nError := 0
+   result   := .T.
+ENDIF
 
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Query()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Query(cQuery) CLASS Fb5class
+
+RETURN TFBQuery():New(::db,cQuery,::dialect)
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method TableExists()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD TableExists(cTable) CLASS Fb5class
+
+
+LOCAL cQuery
+LOCAL result := .F.
+LOCAL qry
+
+cQuery := "select rdb$relation_name from rdb$relations where rdb$relation_name = '"+Upper(AllTrim(cTable))+"'"
+
+qry := FBQuery(::db,cQuery,::dialect)
+
+IF HB_ISARRAY(qry)
+   result := (FBFetch(qry) == 0)
+   FBFree(qry)
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method ListTables()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD ListTables() CLASS Fb5class
 
-   LOCAL result := {}
-   LOCAL cQuery
-   LOCAL qry
 
-   cQuery := "SELECT TRIM(RDB$RELATION_NAME) AS TABLE_NAME FROM RDB$RELATIONS WHERE COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND RDB$VIEW_BLR IS NULL ORDER BY RDB$RELATION_NAME"
+LOCAL result := {}
+LOCAL cQuery
+LOCAL qry
 
-   qry := FBQuery( ::db, RemoveSpaces( cQuery ), ::dialect )
+cQuery := "SELECT TRIM(RDB$RELATION_NAME) AS TABLE_NAME FROM RDB$RELATIONS WHERE COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND RDB$VIEW_BLR IS NULL ORDER BY RDB$RELATION_NAME"
 
-   IF HB_ISARRAY( qry )
-      DO WHILE FBFetch( qry ) == 0
-         AAdd( result, FBGetData( qry, 1 ) )
-      ENDDO
-      FBFree( qry )
-   ENDIF
+qry := FBQuery(::db,RemoveSpaces(cQuery),::dialect)
 
-   RETURN result
+IF HB_ISARRAY(qry)
+   DO WHILE FBFetch(qry) == 0
+      AAdd(result,FBGetData(qry,1))
+   ENDDO
+   FBFree(qry)
+ENDIF
 
-METHOD TableStruct( cTable ) CLASS Fb5class
+RETURN result
 
-   LOCAL result := {}
-   LOCAL cQuery, cType, nSize, cDomain, cField, nType, nDec,nSubType
-   LOCAL qry
 
-   cQuery := "select "
-   cQuery += "  TRIM(a.rdb$field_name),"
-   cQuery += "  b.rdb$field_type,"
-   cQuery += "  b.rdb$field_length,"
-   cQuery += "  b.rdb$field_scale * -1,"
-   cQuery += "  a.rdb$field_source,"
-   cQuery += "  b.rdb$field_sub_type " // Inserido para ler o Subtipo
-   cQuery += "from "
-   cQuery += "  rdb$relation_fields a, rdb$fields b "
-   cQuery += "where "
-   cQuery += "  a.rdb$field_source = b.rdb$field_name "
-   cQuery += "  and a.rdb$relation_name = '" + Upper( AllTrim( ctable ) ) + "' "
-   cQuery += "order by "
-   cQuery += "  a.rdb$field_position "
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method TableStruct()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD TableStruct(cTable) CLASS Fb5class
 
-   qry := FBQuery( ::db, RemoveSpaces( cQuery ), ::dialect )
 
-   IF HB_ISARRAY( qry )
-      DO WHILE FBFetch( qry ) == 0
-         cField  := RTrim( iif( FBGetData( qry, 1 ) == NIL, "", FBGetData( qry, 1 ) ) )
-         nType   := ToNumber( FBGetData( qry, 2 ) )
-         nSize   := ToNumber( FBGetData( qry, 3 ) )
-         nDec    := ToNumber( FBGetData( qry, 4 ) )
-         nSubType := ToNumber( FBGetData( qry, 6 ) ) // Captura o Subtipo
-         cDomain := RTrim( iif( FBGetData( qry, 5 ) == NIL, "", FBGetData( qry, 5 ) ) )
+LOCAL result := {}
+LOCAL cQuery,cType,nSize,cDomain,cField,nType,nDec,nSubType
+LOCAL qry
 
-         // Tratamento expl�cito para evitar ambiguidade (W0001) e uso correto de nType (W0032)
-         SWITCH nType
-            CASE IB_SQL_BOOLEAN
-               cType := "L"
-               nSize := 1
-               nDec  := 0
-               EXIT
-            CASE 7 // SMALLINT
-               IF "BOOL" $ cDomain
-                  cType := "L"
-                  nSize := 1
-                  nDec  := 0
-               ELSE
-                  cType := "N"
-                  nSize := 5
-               ENDIF
-               EXIT
-            CASE 8 // INTEGER
-            CASE 9
-               cType := "N"
-               nSize := 9
-               EXIT
-            CASE 10 // FLOAT
-            CASE 11
-               cType := "N"
-               nSize := 15
-               EXIT
-            CASE 12 // DATE
-               cType := "D"
-               nSize := 8
-               EXIT
-            CASE 13 // TIME
-               cType := "C"
-               nSize := 10
-               EXIT
-            CASE 14 // CHAR
-               cType := "C"
-               EXIT
-            CASE 16 // INT64
-               cType := "N"
-               nSize := 9
-               EXIT
-            CASE 27 // DOUBLE
-               cType := "N"
-               nSize := 15
-               EXIT
-            CASE 35 // TIMESTAMP
-                cType := "T" // Mantem compatibilidade com o wrapper e StructConvert.
-                nSize := 20
-                EXIT
-            CASE 37 // VARCHAR
-            CASE 40
-               cType := "C"
-               EXIT
-           CASE 261 // BLOB
-               IF nSubType == 0
-                  cType := "G" // Bin�rio / OLE
-               ELSE
-                  cType := "M" // Texto / MEMO
-               ENDIF
-               nSize := 10
-               EXIT
-            OTHERWISE
-               cType := "C"
-               nDec  := 0
-         ENDSWITCH
+cQuery := "select "
+cQuery += "  TRIM(a.rdb$field_name),"
+cQuery += "  b.rdb$field_type,"
+cQuery += "  b.rdb$field_length,"
+cQuery += "  b.rdb$field_scale * -1,"
+cQuery += "  a.rdb$field_source,"
+cQuery += "  b.rdb$field_sub_type "   // Inserido para ler o Subtipo
+cQuery += "from "
+cQuery += "  rdb$relation_fields a, rdb$fields b "
+cQuery += "where "
+cQuery += "  a.rdb$field_source = b.rdb$field_name "
+cQuery += "  and a.rdb$relation_name = '"+Upper(AllTrim(ctable))+"' "
+cQuery += "order by "
+cQuery += "  a.rdb$field_position "
 
-         AAdd( result, { cField, cType, nSize, nDec } )
+qry := FBQuery(::db,RemoveSpaces(cQuery),::dialect)
 
-      ENDDO
-      FBFree( qry )
-   ENDIF
+IF HB_ISARRAY(qry)
+   DO WHILE FBFetch(qry) == 0
+      cField   := RTrim(iif(FBGetData(qry,1) == NIL,"",FBGetData(qry,1)))
+      nType    := ToNumber(FBGetData(qry,2))
+      nSize    := ToNumber(FBGetData(qry,3))
+      nDec     := ToNumber(FBGetData(qry,4))
+      nSubType := ToNumber(FBGetData(qry,6))  // Captura o Subtipo
+      cDomain  := RTrim(iif(FBGetData(qry,5) == NIL,"",FBGetData(qry,5)))
 
-   RETURN result
-
-METHOD Delete( oRow, cWhere ) CLASS Fb5class
-
-   LOCAL result := .F.
-   LOCAL aKeys, i, nField, xField, cQuery, aTables
-
-   aTables := oRow:GetTables()
-
-   IF ! HB_ISNUMERIC( ::db ) .AND. Len( aTables ) == 1
-      IF cWhere == NIL
-         aKeys := oRow:GetKeyField()
-
-         cWhere := ""
-         FOR i := 1 TO Len( aKeys )
-            nField := oRow:FieldPos( aKeys[ i ] )
-            xField := oRow:FieldGet( nField )
-
-            cWhere += aKeys[ i ] + "=" + DataToSql( xField, oRow:FieldType( nField ))
-
-            IF i != Len( aKeys )
-               cWhere += " AND "
-            ENDIF
-         NEXT
-      ENDIF
-
-      IF !( cWhere == "" )
-         cQuery := 'DELETE FROM ' + aTables[ 1 ] + ' WHERE ' + cWhere
-         result := ::Execute( cQuery )
-      ENDIF
-   ENDIF
-
-   RETURN result
-
-METHOD Append( oRow ) CLASS Fb5class
-
-   LOCAL result := .F.
-   LOCAL cQuery, i, aTables, aKeys, qryIns, nPosPK
-
-   aTables := oRow:GetTables()
-
-   IF ! HB_ISNUMERIC( ::db ) .AND. Len( aTables ) == 1
-      cQuery := 'INSERT INTO ' + aTables[ 1 ] + '('
-      FOR i := 1 TO oRow:FCount()
-         IF oRow:Changed( i )
-            cQuery += oRow:FieldName( i ) + ","
+      // Tratamento expl�cito para evitar ambiguidade (W0001) e uso correto de nType (W0032)
+      SWITCH nType
+      CASE IB_SQL_BOOLEAN
+         cType := "L"
+         nSize := 1
+         nDec  := 0
+         EXIT
+      CASE 7  // SMALLINT
+         IF "BOOL" $ cDomain
+            cType := "L"
+            nSize := 1
+            nDec  := 0
+         ELSE
+            cType := "N"
+            nSize := 5
          ENDIF
-      NEXT
-
-      cQuery := Left( cQuery, Len( cQuery ) - 1 ) +  ") VALUES ("
-
-      FOR i := 1 TO oRow:FCount()
-         IF oRow:Changed( i )
-            cQuery += DataToSql( oRow:FieldGet( i ), oRow:FieldType( i ) ) + ","
+         EXIT
+      CASE 8  // INTEGER
+      CASE 9
+         cType := "N"
+         nSize := 9
+         EXIT
+      CASE 10   // FLOAT
+      CASE 11
+         cType := "N"
+         nSize := 15
+         EXIT
+      CASE 12   // DATE
+         cType := "D"
+         nSize := 8
+         EXIT
+      CASE 13   // TIME
+         cType := "C"
+         nSize := 10
+         EXIT
+      CASE 14   // CHAR
+         cType := "C"
+         EXIT
+      CASE 16   // INT64
+         cType := "N"
+         nSize := 9
+         EXIT
+      CASE 27   // DOUBLE
+         cType := "N"
+         nSize := 15
+         EXIT
+      CASE 35   // TIMESTAMP
+         cType := "T"   // Mantem compatibilidade com o wrapper e StructConvert.
+         nSize := 20
+         EXIT
+      CASE 37   // VARCHAR
+      CASE 40
+         cType := "C"
+         EXIT
+      CASE 261  // BLOB
+         IF nSubType == 0
+            cType := "G"  // Bin�rio / OLE
+         ELSE
+            cType := "M"  // Texto / MEMO
          ENDIF
-      NEXT
+         nSize := 10
+         EXIT
+      OTHERWISE
+         cType := "C"
+         nDec  := 0
+      ENDSWITCH
 
-      cQuery := Left( cQuery, Len( cQuery ) - 1  ) + ")"
+      AAdd(result,{cField,cType,nSize,nDec})
 
+   ENDDO
+   FBFree(qry)
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Delete()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Delete(oRow,cWhere) CLASS Fb5class
+
+
+LOCAL result := .F.
+LOCAL aKeys,i,nField,xField,cQuery,aTables
+
+aTables := oRow:GetTables()
+
+IF !HB_ISNUMERIC(::db) .AND. Len(aTables) == 1
+   IF cWhere == NIL
       aKeys := oRow:GetKeyField()
-      IF Len( aKeys ) == 1
-         cQuery += " RETURNING " + aKeys[ 1 ]
-         qryIns := FBQuery( ::db, cQuery, ::dialect )
-         IF HB_ISARRAY( qryIns )
-            IF FBFetch( qryIns ) == 0
-               nPosPK := oRow:FieldPos( aKeys[ 1 ] )
-               IF nPosPK > 0
-                  oRow:FieldPut( nPosPK, ToNumber( FBGetData( qryIns, 1 ) ) )
-               ENDIF
-            ENDIF
-            FBFree( qryIns )
-            result := .T.
-         ENDIF
-      ELSE
-         result := ::Execute( cQuery )
-      ENDIF
-   ENDIF
 
-   RETURN result
+      cWhere := ""
+      FOR i := 1 TO Len(aKeys)
+         nField := oRow:FieldPos(aKeys[i])
+         xField := oRow:FieldGet(nField)
 
-METHOD Update( oRow, cWhere ) CLASS Fb5class
+         cWhere += aKeys[i]+"="+DataToSql(xField,oRow:FieldType(nField))
 
-   LOCAL result := .F.
-   LOCAL aKeys, cQuery, i, nField, xField, aTables
-
-   aTables := oRow:GetTables()
-
-   IF ! HB_ISNUMERIC( ::db ) .AND. Len( aTables ) == 1
-      IF cWhere == NIL
-         aKeys := oRow:GetKeyField()
-
-         cWhere := ""
-         FOR i := 1 TO Len( aKeys )
-            nField := oRow:FieldPos( aKeys[ i ] )
-            xField := oRow:FieldGet( nField )
-
-            cWhere += aKeys[ i ] + "=" + DataToSql( xField, oRow:FieldType( nField ) )
-
-            IF i != Len( aKeys )
-               cWhere += " AND "
-            ENDIF
-         NEXT
-      ENDIF
-
-      cQuery := "UPDATE " + aTables[ 1 ] + " SET "
-      FOR i := 1 TO oRow:FCount()
-         IF oRow:Changed( i )
-            cQuery += oRow:FieldName( i ) + " = " + DataToSql( oRow:FieldGet( i ), oRow:FieldType( i )) + ","
+         IF i != Len(aKeys)
+            cWhere += " AND "
          ENDIF
       NEXT
-
-      IF !( cWhere == "" )
-         cQuery := Left( cQuery, Len( cQuery ) - 1 ) + " WHERE " + cWhere
-         result := ::Execute( cQuery )
-      ENDIF
    ENDIF
 
-   RETURN result
+   IF !(cWhere == "")
+      cQuery := 'DELETE FROM '+aTables[1]+' WHERE '+cWhere
+      result :=::Execute(cQuery)
+   ENDIF
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Append()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Append(oRow) CLASS Fb5class
+
+
+LOCAL result := .F.
+LOCAL cQuery,i,aTables,aKeys,qryIns,nPosPK
+
+aTables := oRow:GetTables()
+
+IF !HB_ISNUMERIC(::db) .AND. Len(aTables) == 1
+   cQuery := 'INSERT INTO '+aTables[1]+'('
+   FOR i := 1 TO oRow:FCount()
+      IF oRow:Changed(i)
+         cQuery += oRow:FieldName(i)+","
+      ENDIF
+   NEXT
+
+   cQuery := Left(cQuery,Len(cQuery) - 1)+") VALUES ("
+
+   FOR i := 1 TO oRow:FCount()
+      IF oRow:Changed(i)
+         cQuery += DataToSql(oRow:FieldGet(i),oRow:FieldType(i))+","
+      ENDIF
+   NEXT
+
+   cQuery := Left(cQuery,Len(cQuery) - 1)+")"
+
+   aKeys := oRow:GetKeyField()
+   IF Len(aKeys) == 1
+      cQuery += " RETURNING "+aKeys[1]
+      qryIns := FBQuery(::db,cQuery,::dialect)
+      IF HB_ISARRAY(qryIns)
+         IF FBFetch(qryIns) == 0
+            nPosPK := oRow:FieldPos(aKeys[1])
+            IF nPosPK > 0
+               oRow:FieldPut(nPosPK,ToNumber(FBGetData(qryIns,1)))
+            ENDIF
+         ENDIF
+         FBFree(qryIns)
+         result := .T.
+      ENDIF
+   ELSE
+      result :=::Execute(cQuery)
+   ENDIF
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Update()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Update(oRow,cWhere) CLASS Fb5class
+
+
+LOCAL result := .F.
+LOCAL aKeys,cQuery,i,nField,xField,aTables
+
+aTables := oRow:GetTables()
+
+IF !HB_ISNUMERIC(::db) .AND. Len(aTables) == 1
+   IF cWhere == NIL
+      aKeys := oRow:GetKeyField()
+
+      cWhere := ""
+      FOR i := 1 TO Len(aKeys)
+         nField := oRow:FieldPos(aKeys[i])
+         xField := oRow:FieldGet(nField)
+
+         cWhere += aKeys[i]+"="+DataToSql(xField,oRow:FieldType(nField))
+
+         IF i != Len(aKeys)
+            cWhere += " AND "
+         ENDIF
+      NEXT
+   ENDIF
+
+   cQuery := "UPDATE "+aTables[1]+" SET "
+   FOR i := 1 TO oRow:FCount()
+      IF oRow:Changed(i)
+         cQuery += oRow:FieldName(i)+" = "+DataToSql(oRow:FieldGet(i),oRow:FieldType(i))+","
+      ENDIF
+   NEXT
+
+   IF !(cWhere == "")
+      cQuery := Left(cQuery,Len(cQuery) - 1)+" WHERE "+cWhere
+      result :=::Execute(cQuery)
+   ENDIF
+ENDIF
+
+RETURN result
 
 CREATE CLASS TFBQuery
 
-   VAR      nError
-   VAR      lError
-   VAR      Dialect
-   VAR      nLastRecError
-   VAR      lBof
-   VAR      lEof
-   VAR      nRecno
-   VAR      qry
-   VAR      aStruct
-   VAR      numcols
-   VAR      closed
-   VAR      db
-   VAR      query
-   VAR      aKeys
-   VAR      aTables
-   VAR      oLastError // <-- ADICIONAR
+   VAR nError
+   VAR lError
+   VAR Dialect
+   VAR nLastRecError
+   VAR lBof
+   VAR lEof
+   VAR nRecno
+   VAR qry
+   VAR aStruct
+   VAR numcols
+   VAR closed
+   VAR db
+   VAR query
+   VAR aKeys
+   VAR aTables
+   VAR oLastError // <-- ADICIONAR
 
-   METHOD   New( nDB, cQuery, nDialect )
-   METHOD   Destroy()
-   METHOD   Close()            INLINE ::Destroy()
+   METHOD New(nDB,cQuery,nDialect)
+   METHOD Destroy()
+   METHOD Close() INLINE ::Destroy()
 
-   METHOD   Refresh()
-   METHOD   Fetch()
-   METHOD   Skip()             INLINE ::Fetch()
+   METHOD Refresh()
+   METHOD Fetch()
+   METHOD Skip() INLINE ::Fetch()
 
-   METHOD   Bof()              INLINE ::lBof
-   METHOD   Eof()              INLINE ::lEof
-   METHOD   RecNo()            INLINE ::nRecno
+   METHOD Bof() INLINE ::lBof
+   METHOD Eof() INLINE ::lEof
+   METHOD RecNo() INLINE ::nRecno
 
-   METHOD   NetErr()           INLINE ::lError
-   METHOD   Error()            INLINE FBError( ::nError )
-   METHOD   ErrorNo()          INLINE ::nError
+   METHOD NetErr() INLINE ::lError
+   METHOD Error() INLINE FBError(::nError)
+   METHOD ErrorNo() INLINE ::nError
 
-   METHOD   FCount()           INLINE ::numcols
-   METHOD   Struct()
-   METHOD   FieldName( nField )
-   METHOD   FieldPos( cField )
-   METHOD   FieldLen( nField )
-   METHOD   FieldDec( nField )
-   METHOD   FieldType( nField )
-   METHOD   LastRec()
-   METHOD   LastRecError()     INLINE ::nLastRecError
+   METHOD FCount() INLINE ::numcols
+   METHOD Struct()
+   METHOD FieldName(nField)
+   METHOD FieldPos(cField)
+   METHOD FieldLen(nField)
+   METHOD FieldDec(nField)
+   METHOD FieldType(nField)
+   METHOD LastRec()
+   METHOD LastRecError() INLINE ::nLastRecError
 
-   METHOD   FieldGet( nField )
-   METHOD   GetRow()
-   METHOD   GetBlankRow()
-   METHOD   Blank()            INLINE ::GetBlankRow()
-   METHOD   GetKeyField()
-   METHOD   SetError( nCode, cContext, cQuery ) // <-- ADICIONAR
-  
+   METHOD FieldGet(nField)
+   METHOD GetRow()
+   METHOD GetBlankRow()
+   METHOD Blank() INLINE ::GetBlankRow()
+   METHOD GetKeyField()
+   METHOD SetError(nCode,cContext,cQuery) // <-- ADICIONAR
+
 ENDCLASS
 
-METHOD New( nDB, cQuery, nDialect ) CLASS TFBQuery
 
-   ::db := nDb
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method New()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD New(nDB,cQuery,nDialect) CLASS TFBQuery
+
+
+::db := nDb
 //   ::query := RemoveSpaces( cQuery )
-   ::query := cQuery
-   ::dialect := nDialect
-   ::closed := .T.
-   ::aKeys := NIL
-   ::nLastRecError := 0
+::query         := cQuery
+::dialect       := nDialect
+::closed        := .T.
+::aKeys         := NIL
+::nLastRecError := 0
 
-   ::Refresh()
+::Refresh()
 
-   RETURN Self
+RETURN Self
 
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method LastRec()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD LastRec() CLASS TFBQuery
-   LOCAL nTotal := 0
-   LOCAL oQCount := TFBQuery():New( ::db, "SELECT COUNT(*) FROM (" + ::query + ") AS FB5_COUNT", ::dialect )
-   
-   ::nLastRecError := 0
-   IF oQCount == NIL
-      ::nLastRecError := -1
-      RETURN -1
-   ENDIF
 
-   IF oQCount:NetErr()
+LOCAL nTotal  := 0
+LOCAL oQCount := TFBQuery():New(::db,"SELECT COUNT(*) FROM ("+::query+") AS FB5_COUNT",::dialect)
+
+::nLastRecError := 0
+IF oQCount == NIL
+   ::nLastRecError := - 1
+   RETURN - 1
+ENDIF
+
+IF oQCount:NetErr()
+   ::nLastRecError := oQCount:ErrorNo()
+   nTotal          := - 1
+ELSE
+   IF oQCount:Fetch()
+      nTotal := ToNumber(oQCount:FieldGet(1))
+   ELSEIF oQCount:NetErr()
       ::nLastRecError := oQCount:ErrorNo()
-      nTotal := -1
-   ELSE
-      IF oQCount:Fetch()
-         nTotal := ToNumber( oQCount:FieldGet( 1 ) )
-      ELSEIF oQCount:NetErr()
-         ::nLastRecError := oQCount:ErrorNo()
-         nTotal := -1
-      ENDIF
+      nTotal          := - 1
    ENDIF
-   oQCount:Destroy()
-   RETURN nTotal
-   
-METHOD SetError( nCode, cContext, cQuery ) CLASS TFBQuery
-   ::lError := .T.
-   ::nError := nCode
-   
-   ::oLastError := {=>}
-   ::oLastError["Code"]    := nCode
-   ::oLastError["Message"] := FBError( nCode )
-   ::oLastError["SQL"]     := iif( cQuery == NIL, "", cQuery )
-   ::oLastError["Context"] := cContext
-   
-   RETURN .F.   
+ENDIF
+oQCount:Destroy()
+RETURN nTotal
 
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method SetError()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD SetError(nCode,cContext,cQuery) CLASS TFBQuery
+
+::lError := .T.
+::nError := nCode
+
+::oLastError              := {=>}
+::oLastError[ "Code" ]    := nCode
+::oLastError[ "Message" ] := FBError(nCode)
+::oLastError[ "SQL" ]     := iif(cQuery == NIL,"",cQuery)
+::oLastError[ "Context" ] := cContext
+
+RETURN .F.
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Refresh()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD Refresh() CLASS TFBQuery
 
-   LOCAL qry, result, i, aTable := {}
 
-   IF ! ::closed
-      ::Destroy()
-   ENDIF
+LOCAL qry,result,i,aTable := {}
 
-   ::lBof := .T.
-   ::lEof := .F.
-   ::nRecno := 0
-   ::closed := .F.
-   ::numcols := 0
-   ::aStruct := {}
-   ::qry := NIL
-   ::nError := 0
+IF !::closed
+   ::Destroy()
+ENDIF
+
+::lBof    := .T.
+::lEof    := .F.
+::nRecno  := 0
+::closed  := .F.
+::numcols := 0
+::aStruct := {}
+::qry     := NIL
+::nError  := 0
+::lError  := .F.
+
+result := .T.
+
+qry := FBQuery(::db,::query,::dialect)
+
+IF HB_ISARRAY(qry)
+   ::numcols := qry[4]
+   ::aStruct := StructConvert(qry[6],::db,::dialect)
+
    ::lError := .F.
+   ::nError := 0
+   ::qry    := qry
 
-   result := .T.
+   FOR i := 1 TO Len(::aStruct)
+      IF hb_AScan(aTable,::aStruct[i ,  5],,,.T.) == 0
+         AAdd(aTable,::aStruct[i ,  5])
+      ENDIF
+   NEXT
 
-   qry := FBQuery( ::db, ::query, ::dialect )
+   ::aTables := aTable
 
-   IF HB_ISARRAY( qry )
-      ::numcols := qry[ 4 ]
-      ::aStruct := StructConvert( qry[ 6 ], ::db, ::dialect )
+ELSE
+   ::SetError(qry,"TFBQuery:Refresh()",::query)
+   //::lError := .T.
+   //::nError := qry
+ENDIF
 
-      ::lError := .F.
-      ::nError := 0
-      ::qry := qry
+RETURN result
 
-      FOR i := 1 TO Len( ::aStruct )
-         IF hb_AScan( aTable, ::aStruct[ i ][ 5 ], , , .T. ) == 0
-            AAdd( aTable, ::aStruct[ i ][ 5 ] )
-         ENDIF
-      NEXT
 
-      ::aTables := aTable
-
-   ELSE
-      ::SetError( qry, "TFBQuery:Refresh()", ::query )
-      //::lError := .T.
-      //::nError := qry
-   ENDIF
-
-   RETURN result
-
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Destroy()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD Destroy() CLASS TFBQuery
 
-   LOCAL result := .T.
-   LOCAL n
 
-   IF ! ::closed .AND. HB_ISARRAY( ::qry )
-      IF ( n := FBFree( ::qry ) ) < 0
-         ::lError := .T.
-         ::nError := n
+LOCAL result := .T.
+LOCAL n
+
+IF !::closed .AND. HB_ISARRAY(::qry)
+   IF (n := FBFree(::qry)) < 0
+      ::lError := .T.
+      ::nError := n
+      result   := .F.
+   ENDIF
+ENDIF
+
+::qry    := NIL
+::closed := .T.
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Fetch()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Fetch() CLASS TFBQuery
+
+
+LOCAL result     := .F.
+LOCAL fetch_stat
+
+IF !::lError .AND. !::lEof
+   IF !::Closed
+      fetch_stat := FBFetch(::qry)
+
+      IF fetch_stat == 0
+         ::nRecno ++
+         ::lBof := .F.
+         result := .T.
+      ELSEIF fetch_stat == - 1
+         ::lEof := .T.
+      ELSE
+         ::SetError(fetch_stat,"Fetch()",::query)
+      ENDIF
+   ENDIF
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Struct()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Struct() CLASS TFBQuery
+
+
+LOCAL result := {}
+LOCAL i
+
+IF !::lError
+   FOR i := 1 TO Len(::aStruct)
+      AAdd(result,{::aStruct[i ,  1],::aStruct[i ,  2],::aStruct[i ,  3],::aStruct[i ,  4]})
+   NEXT
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldPos()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldPos(cField) CLASS TFBQuery
+
+
+LOCAL result := 0
+
+IF !::lError
+   result := AScan(::aStruct,{| x | x[1] == RTrim(Upper(cField))})
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldName()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldName(nField) CLASS TFBQuery
+
+
+LOCAL result
+
+IF !::lError .AND. nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,1]
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldType()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldType(nField) CLASS TFBQuery
+
+
+LOCAL result
+
+IF !::lError .AND. nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,2]
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldLen()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldLen(nField) CLASS TFBQuery
+
+
+LOCAL result
+
+IF !::lError .AND. nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,3]
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldDec()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldDec(nField) CLASS TFBQuery
+
+
+LOCAL result
+
+IF !::lError .AND. nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,4]
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldGet()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldGet(nField) CLASS TFBQuery
+
+
+LOCAL result,aBlob,i,cType
+
+IF !::lError .AND. nField >= 1 .AND. nField <= Len(::aStruct) .AND. !::closed
+   result := FBGetData(::qry,nField)
+   cType  := ::aStruct[nField,2]
+
+   IF cType == "M" .OR. cType == "G"
+      IF result != NIL
+         // --- BARREIRA DE LAZY LOADING ---
+         IF cType == "M" .AND. !t_lLoadMemos
+            result := "<MEMO>"
+         ELSEIF cType == "G" .AND. !t_lLoadBlobs
+            result := "<IMAGEM/BLOB>"
+         ELSE
+            // Carrega os dados reais do banco
+            aBlob  := FBGetBlob(::db,result)
+            result := ""
+            FOR i := 1 TO Len(aBlob)
+               result += aBlob[i]
+            NEXT
+         ENDIF
+      ELSE
+         result := ""
+      ENDIF
+
+   ELSEIF cType == "N"
+      IF result != NIL
+         result := ToNumber(result)
+      ELSE
+         result := 0
+      ENDIF
+
+   ELSEIF cType == "D"
+      IF result != NIL
+         result := StrDateClass(result)
+      ELSE
+         result := hb_SToD()
+      ENDIF
+
+   ELSEIF cType == "T" .OR. cType == "H"
+      IF result != NIL
+         result := UniversalDateTime(result)  // <-- INJE��O: Conversor Universal de Data e Hora
+      ELSE
+         result := hb_SToT()
+      ENDIF
+
+
+   ELSEIF cType == "L"
+      IF result != NIL
+         result := strlogicClasse(result,.F.)
+      ELSE
          result := .F.
       ENDIF
    ENDIF
+ENDIF
 
-   ::qry := NIL
-   ::closed := .T.
+RETURN result
 
-   RETURN result
 
-METHOD Fetch() CLASS TFBQuery
-
-   LOCAL result := .F.
-   LOCAL fetch_stat
-
-   IF ! ::lError .AND. ! ::lEof
-      IF ! ::Closed
-         fetch_stat := FBFetch( ::qry )
-
-         IF fetch_stat == 0
-            ::nRecno++
-            ::lBof := .F.
-            result := .T.
-         ELSEIF fetch_stat == -1
-            ::lEof := .T.
-         ELSE
-            ::SetError( fetch_stat, "Fetch()", ::query )
-         ENDIF
-      ENDIF
-   ENDIF
-
-   RETURN result
-
-METHOD Struct() CLASS TFBQuery
-
-   LOCAL result := {}
-   LOCAL i
-
-   IF ! ::lError
-      FOR i := 1 TO Len( ::aStruct )
-         AAdd( result, { ::aStruct[ i ][ 1 ], ::aStruct[ i ][ 2 ], ::aStruct[ i ][ 3 ], ::aStruct[ i ][ 4 ] } )
-      NEXT
-   ENDIF
-
-   RETURN result
-
-METHOD FieldPos( cField ) CLASS TFBQuery
-
-   LOCAL result := 0
-
-   IF ! ::lError
-      result := AScan( ::aStruct, {| x | x[ 1 ] == RTrim( Upper( cField ) ) } )
-   ENDIF
-
-   RETURN result
-
-METHOD FieldName( nField ) CLASS TFBQuery
-
-   LOCAL result
-
-   IF ! ::lError .AND. nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 1 ]
-   ENDIF
-
-   RETURN result
-
-METHOD FieldType( nField ) CLASS TFBQuery
-
-   LOCAL result
-
-   IF ! ::lError .AND. nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 2 ]
-   ENDIF
-
-   RETURN result
-
-METHOD FieldLen( nField ) CLASS TFBQuery
-
-   LOCAL result
-
-   IF ! ::lError .AND. nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 3 ]
-   ENDIF
-
-   RETURN result
-
-METHOD FieldDec( nField ) CLASS TFBQuery
-
-   LOCAL result
-
-   IF ! ::lError .AND. nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 4 ]
-   ENDIF
-
-   RETURN result
-
-METHOD FieldGet( nField ) CLASS TFBQuery
-
-   LOCAL result, aBlob, i, cType
-
-   IF ! ::lError .AND. nField >= 1 .AND. nField <= Len( ::aStruct ) .AND. ! ::closed
-      result := FBGetData( ::qry, nField )
-      cType := ::aStruct[ nField ][ 2 ]
-
-      IF cType == "M" .OR. cType == "G"
-         IF result != NIL
-            // --- BARREIRA DE LAZY LOADING ---
-            IF cType == "M" .AND. ! t_lLoadMemos
-               result := "<MEMO>"
-            ELSEIF cType == "G" .AND. ! t_lLoadBlobs
-               result := "<IMAGEM/BLOB>"
-            ELSE
-               // Carrega os dados reais do banco
-               aBlob := FBGetBlob( ::db, result )
-               result := ""
-               FOR i := 1 TO Len( aBlob )
-                  result += aBlob[ i ]
-               NEXT
-            ENDIF
-         ELSE
-            result := ""
-         ENDIF
-
-      ELSEIF cType == "N"
-         IF result != NIL
-            result := ToNumber( result )
-         ELSE
-            result := 0
-         ENDIF
-
-      ELSEIF cType == "D"
-         IF result != NIL
-            result := StrDateClass( result )
-         ELSE
-            result := hb_SToD()
-         ENDIF
-         
-      ELSEIF cType == "T" .OR. cType == "H"
-         IF result != NIL
-            result := UniversalDateTime( result ) // <-- INJE��O: Conversor Universal de Data e Hora
-         ELSE
-            result := hb_SToT()
-         ENDIF   
-         
-
-      ELSEIF cType == "L"
-         IF result != NIL
-            result := strlogicClasse( result, .F. )
-         ELSE
-            result := .F.
-         ENDIF
-      ENDIF
-   ENDIF
-
-   RETURN result
-
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Getrow()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD Getrow() CLASS TFBQuery
 
-   LOCAL result
-   LOCAL aRow
-   LOCAL i
 
-   IF ! ::lError .AND. ! ::closed
-      aRow := Array( ::numcols )
+LOCAL result
+LOCAL aRow
+LOCAL i
 
-      FOR i := 1 TO ::numcols
-         aRow[ i ] := ::FieldGet( i )
-      NEXT
+IF !::lError .AND. !::closed
+   aRow := Array(::numcols)
 
-      result := TFBRow():New( aRow, ::aStruct, ::db, ::dialect, ::aTables )
-   ENDIF
+   FOR i := 1 TO ::numcols
+      aRow[ i ] :=::FieldGet(i)
+   NEXT
 
-   RETURN result
+   result := TFBRow():New(aRow,::aStruct,::db,::dialect,::aTables)
+ENDIF
 
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method GetBlankRow()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD GetBlankRow() CLASS TFBQuery
 
-   LOCAL result
-   LOCAL aRow
-   LOCAL i
 
-   IF ! ::lError
-      aRow := Array( ::numcols )
+LOCAL result
+LOCAL aRow
+LOCAL i
 
-      FOR i := 1 TO ::numcols
-         SWITCH ::aStruct[ i ][ 2 ]
-         CASE "C"
-         CASE "M"
-            aRow[ i ] := ""
-            EXIT
-         CASE "G" // Iniciar Vazio
-            aRow[ i ] := ""
-            EXIT   
-         CASE "N"
-            aRow[ i ] := 0
-            EXIT
-         CASE "L"
-            aRow[ i ] := .F.
-            EXIT
-         CASE "D"
-            aRow[ i ] := hb_SToD()
-            EXIT
-         CASE "T"
-         CASE "H"
-            aRow[ i ] := hb_SToT()
-            EXIT
-         ENDSWITCH
-      NEXT
+IF !::lError
+   aRow := Array(::numcols)
 
-      result := TFBRow():New( aRow, ::aStruct, ::db, ::dialect, ::aTables )
-   ENDIF
+   FOR i := 1 TO ::numcols
+      SWITCH ::aStruct[i ,  2]
+      CASE "C"
+      CASE "M"
+         aRow[ i ] := ""
+         EXIT
+      CASE "G"  // Iniciar Vazio
+         aRow[ i ] := ""
+         EXIT
+      CASE "N"
+         aRow[ i ] := 0
+         EXIT
+      CASE "L"
+         aRow[ i ] := .F.
+         EXIT
+      CASE "D"
+         aRow[ i ] := hb_SToD()
+         EXIT
+      CASE "T"
+      CASE "H"
+         aRow[ i ] := hb_SToT()
+         EXIT
+      ENDSWITCH
+   NEXT
 
-   RETURN result
+   result := TFBRow():New(aRow,::aStruct,::db,::dialect,::aTables)
+ENDIF
 
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method GetKeyField()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD GetKeyField() CLASS TFBQuery
 
-   IF ::aKeys == NIL
-      ::aKeys := KeyField( ::aTables, ::db, ::dialect )
-   ENDIF
 
-   RETURN ::aKeys
+IF ::aKeys == NIL
+   ::aKeys := KeyField(::aTables,::db,::dialect)
+ENDIF
+
+RETURN ::aKeys
 
 CREATE CLASS TFBRow
 
-   VAR      aRow
-   VAR      aStruct
-   VAR      aChanged
-   VAR      aKeys
-   VAR      db
-   VAR      dialect
-   VAR      aTables
+   VAR aRow
+   VAR aStruct
+   VAR aChanged
+   VAR aKeys
+   VAR db
+   VAR dialect
+   VAR aTables
 
-   METHOD   New( row, struct, nDB, nDialect, aTable )
-   METHOD   Changed( nField )
-   METHOD   GetTables()        INLINE ::aTables
-   METHOD   FCount()           INLINE Len( ::aRow )
-   METHOD   FieldGet( nField )
-   METHOD   FieldPut( nField, Value )
-   METHOD   FieldName( nField )
-   METHOD   FieldPos( cField )
-   METHOD   FieldLen( nField )
-   METHOD   FieldDec( nField )
-   METHOD   FieldType( nField )
-   METHOD   GetKeyField()
+   METHOD New(row,struct,nDB,nDialect,aTable)
+   METHOD Changed(nField)
+   METHOD GetTables() INLINE ::aTables
+   METHOD FCount() INLINE Len(::aRow)
+   METHOD FieldGet(nField)
+   METHOD FieldPut(nField,Value)
+   METHOD FieldName(nField)
+   METHOD FieldPos(cField)
+   METHOD FieldLen(nField)
+   METHOD FieldDec(nField)
+   METHOD FieldType(nField)
+   METHOD GetKeyField()
 
 ENDCLASS
 
-METHOD new( row, struct, nDb, nDialect, aTable ) CLASS TFBRow
 
-   ::aRow := row
-   ::aStruct := struct
-   ::db := nDB
-   ::dialect := nDialect
-   ::aTables := aTable
-   ::aChanged := Array( Len( row ) )
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method new()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD new(row,struct,nDb,nDialect,aTable) CLASS TFBRow
 
-   RETURN Self
 
-METHOD Changed( nField ) CLASS TFBRow
+::aRow     := row
+::aStruct  := struct
+::db       := nDB
+::dialect  := nDialect
+::aTables  := aTable
+::aChanged := Array(Len(row))
 
-   LOCAL result
+RETURN Self
 
-   IF nField >= 1 .AND. Len( ::aChanged ) >= nField .AND. ::aChanged != NIL
-      result := ( ::aChanged[ nField ] != NIL )
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method Changed()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD Changed(nField) CLASS TFBRow
+
+
+LOCAL result
+
+IF nField >= 1 .AND. Len(::aChanged) >= nField .AND. ::aChanged != NIL
+   result := (::aChanged[nField] != NIL)
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldGet()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldGet(nField) CLASS TFBRow
+
+
+LOCAL result
+
+IF nField >= 1 .AND. nField <= Len(::aRow)
+   result := ::aRow[nField]
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldPut()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldPut(nField,Value) CLASS TFBRow
+
+
+LOCAL result,cType
+
+IF nField >= 1 .AND. nField <= Len(::aRow)
+   cType :=::FieldType(nField)
+
+   // Prote��o de Lazy Loading: Impede que r�tulos tempor�rios substituam os dados reais
+   IF cType == "G" .AND. ((ValType(Value) == "C" .AND. Value == "<IMAGEM/BLOB>") .OR. !t_lLoadBlobs)
+      RETURN Value
+   ENDIF
+   IF cType == "M" .AND. ((ValType(Value) == "C" .AND. Value == "<MEMO>") .OR. !t_lLoadMemos)
+      RETURN Value
    ENDIF
 
-   RETURN result
+   ::aChanged[ nField ] := .T.
+   result               := ::aRow[nField] := Value
+ENDIF
 
-METHOD FieldGet( nField ) CLASS TFBRow
+RETURN result
 
-   LOCAL result
 
-   IF nField >= 1 .AND. nField <= Len( ::aRow )
-      result := ::aRow[ nField ]
-   ENDIF
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldName()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldName(nField) CLASS TFBRow
 
-   RETURN result
 
-METHOD FieldPut( nField, Value ) CLASS TFBRow
+LOCAL result
 
-   LOCAL result, cType
+IF nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,1]
+ENDIF
 
-   IF nField >= 1 .AND. nField <= Len( ::aRow )
-      cType := ::FieldType( nField )
-      
-      // Prote��o de Lazy Loading: Impede que r�tulos tempor�rios substituam os dados reais
-      IF cType == "G" .AND. ( ( ValType( Value ) == "C" .AND. Value == "<IMAGEM/BLOB>" ) .OR. !t_lLoadBlobs )
-         RETURN Value
-      ENDIF
-      IF cType == "M" .AND. ( ( ValType( Value ) == "C" .AND. Value == "<MEMO>" ) .OR. !t_lLoadMemos )
-         RETURN Value
-      ENDIF
+RETURN result
 
-      ::aChanged[ nField ] := .T.
-      result := ::aRow[ nField ] := Value
-   ENDIF
 
-   RETURN result
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldPos()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldPos(cField) CLASS TFBRow
 
-METHOD FieldName( nField ) CLASS TFBRow
+RETURN AScan(::aStruct,{| x | x[1] == RTrim(Upper(cField))})
 
-   LOCAL result
 
-   IF nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 1 ]
-   ENDIF
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldType()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldType(nField) CLASS TFBRow
 
-   RETURN result
 
-METHOD FieldPos( cField ) CLASS TFBRow
-   RETURN AScan( ::aStruct, {| x | x[ 1 ] == RTrim( Upper( cField ) ) } )
+LOCAL result
 
-METHOD FieldType( nField ) CLASS TFBRow
+IF nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,2]
+ENDIF
 
-   LOCAL result
+RETURN result
 
-   IF nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 2 ]
-   ENDIF
 
-   RETURN result
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldLen()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldLen(nField) CLASS TFBRow
 
-METHOD FieldLen( nField ) CLASS TFBRow
 
-   LOCAL result
+LOCAL result
 
-   IF nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 3 ]
-   ENDIF
+IF nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,3]
+ENDIF
 
-   RETURN result
+RETURN result
 
-METHOD FieldDec( nField ) CLASS TFBRow
 
-   LOCAL result
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method FieldDec()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD FieldDec(nField) CLASS TFBRow
 
-   IF nField >= 1 .AND. nField <= Len( ::aStruct )
-      result := ::aStruct[ nField ][ 4 ]
-   ENDIF
 
-   RETURN result
+LOCAL result
 
+IF nField >= 1 .AND. nField <= Len(::aStruct)
+   result := ::aStruct[nField,4]
+ENDIF
+
+RETURN result
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method GetKeyField()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
 METHOD GetKeyField() CLASS TFBRow
 
-   IF ::aKeys == NIL
-      ::aKeys := KeyField( ::aTables, ::db, ::dialect )
-   ENDIF
 
-   RETURN ::aKeys
+IF ::aKeys == NIL
+   ::aKeys := KeyField(::aTables,::db,::dialect)
+ENDIF
 
-STATIC FUNCTION KeyField( aTables, db, dialect )
+RETURN ::aKeys
 
-   LOCAL cTable, cQuery
-   LOCAL qry
-   LOCAL aKeys := {}
 
-   IF Len( aTables ) == 1
-      cTable := aTables[ 1 ]
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Static Function KeyField()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+STATIC FUNCTION KeyField(aTables,db,dialect)
 
-      cQuery := " select "
-      cQuery += "   a.rdb$field_name "
-      cQuery += " from "
-      cQuery += "   rdb$index_segments a, "
-      cQuery += "   rdb$relation_constraints b "
-      cQuery += " where "
-      cQuery += "   a.rdb$index_name = b.rdb$index_name and "
-      cQuery += "   b.rdb$constraint_type = 'PRIMARY KEY' and "
-      cQuery += "   b.rdb$relation_name = " + DataToSql( cTable )
-      cQuery += " order by "
-      cQuery += "   b.rdb$relation_name, "
-      cQuery += "   a.rdb$field_position "
 
-      qry := FBQuery( db, RemoveSpaces( cQuery ), dialect )
+LOCAL cTable,cQuery
+LOCAL qry
+LOCAL aKeys  := {}
 
-      IF HB_ISARRAY( qry )
-         DO WHILE FBFetch( qry ) == 0
-            AAdd( aKeys, RTrim( FBGetData( qry, 1 ) ) )
-         ENDDO
-         FBFree( qry )
-      ENDIF
-   ENDIF
+IF Len(aTables) == 1
+   cTable := aTables[1]
 
-   RETURN aKeys
+   cQuery := " select "
+   cQuery += "   a.rdb$field_name "
+   cQuery += " from "
+   cQuery += "   rdb$index_segments a, "
+   cQuery += "   rdb$relation_constraints b "
+   cQuery += " where "
+   cQuery += "   a.rdb$index_name = b.rdb$index_name and "
+   cQuery += "   b.rdb$constraint_type = 'PRIMARY KEY' and "
+   cQuery += "   b.rdb$relation_name = "+DataToSql(cTable)
+   cQuery += " order by "
+   cQuery += "   b.rdb$relation_name, "
+   cQuery += "   a.rdb$field_position "
 
-   
-METHOD GetServerInfo() CLASS Fb5class
-   LOCAL oQuery, cVersion := ""
+   qry := FBQuery(db,RemoveSpaces(cQuery),dialect)
 
-   oQuery := ::Query("SELECT CAST(rdb$get_context('SYSTEM', 'ENGINE_VERSION') AS CHAR(30)) AS VER FROM rdb$database")
-   
-   IF oQuery != NIL
-      // Realiza o Fetch no objeto para carregar o buffer e atualizar o status de Eof
-      oQuery:Fetch() 
-      
-      IF !oQuery:Eof()
-         cVersion := oQuery:FieldGet( 1 )
-      ENDIF
-      oQuery:Destroy()
-   ENDIF
-
-   RETURN AllTrim( cVersion )
-
-STATIC FUNCTION DataToSql( xField, cType )
-
-   LOCAL nSeconds
-   LOCAL nMillis
-   LOCAL cTime
-
-   hb_default( @cType, "" )
-
-   SWITCH ValType( xField )
-   CASE "C"
-   CASE "M"
-      IF cType == "G" .OR. cType == "M"
-         RETURN "X'" + hb_StrToHex( xField ) + "'"
-      ELSE
-         RETURN "'" + StrTran( xField, "'", "''" ) + "'"
-      ENDIF
-
-   CASE "D"
-      IF Empty( xField )
-         RETURN "NULL"
-      ENDIF
-      RETURN "DATE '" + StrZero( Year( xField ), 4 ) + "-" + ;
-             StrZero( Month( xField ), 2 ) + "-" + ;
-             StrZero( Day( xField ), 2 ) + "'"
-
-   CASE "N"
-      RETURN AllTrim( Str( xField ) )
-
-   CASE "L"
-      RETURN iif( xField, "TRUE", "FALSE" )
-
-   CASE "T"
-   CASE "H"
-      IF cType != "H" .AND. Empty( xField )
-         RETURN "NULL"
-      ENDIF
-
-      nSeconds := Int( hb_Sec( xField ) )
-      nMillis  := Min( 999, Int( ( hb_Sec( xField ) - nSeconds ) * 1000 + 0.5 ) )
-      cTime := StrZero( hb_Hour( xField ), 2 ) + ":" + ;
-               StrZero( hb_Minute( xField ), 2 ) + ":" + ;
-               StrZero( nSeconds, 2 ) + "." + StrZero( nMillis, 3 )
-
-      IF cType == "H"
-         RETURN "TIME '" + cTime + "'"
-      ENDIF
-      RETURN "TIMESTAMP '" + StrZero( Year( xField ), 4 ) + "-" + ;
-             StrZero( Month( xField ), 2 ) + "-" + ;
-             StrZero( Day( xField ), 2 ) + " " + cTime + "'"
-   ENDSWITCH
-
-   RETURN "NULL"
-
-STATIC FUNCTION ToNumber( xValue )
-   DO CASE
-   CASE ValType( xValue ) == "N"
-      RETURN xValue
-   CASE ValType( xValue ) == "C"
-      RETURN Val( xValue )
-   OTHERWISE
-      RETURN 0
-   ENDCASE
-   RETURN 0
-
-STATIC FUNCTION StructConvert( aStru, db, dialect )
-
-   LOCAL aNew := {}
-   LOCAL cField
-   LOCAL nType
-   LOCAL cType
-   LOCAL nSize
-   LOCAL nDec
-   LOCAL nSubType
-   LOCAL cTable
-   LOCAL cDomain
-   LOCAL i
-   LOCAL qry
-   LOCAL cQuery
-   LOCAL aDomains := {}
-   LOCAL nVal
-
-   LOCAL xTables := ""
-   LOCAL xFields := ""
-
-   FOR i := 1 TO Len( aStru )
-      xtables += DataToSql( aStru[ i ][ 5 ] )
-      xfields += DataToSql( aStru[ i ][ 1 ] )
-
-      IF i != Len( aStru )
-         xtables += ","
-         xfields += ","
-      ENDIF
-   NEXT
-  
-   cQuery := "select rdb$relation_name, rdb$field_name, rdb$field_source "
-   cQuery += "  from rdb$relation_fields "
-   cQuery += " where rdb$field_name not like 'RDB$%' "
-   cQuery += "   and rdb$relation_name in (" + xtables + ")"
-   cQuery += "   and rdb$field_name in (" + xfields + ")"
-
-   qry := FBQuery( db, RemoveSpaces( cQuery ), dialect )
-
-   IF HB_ISARRAY( qry )
-
-      DO WHILE FBFetch( qry ) == 0
-         AAdd( aDomains, { ;
-            iif( FBGetData( qry, 1 ) == NIL, "", FBGetData( qry, 1 ) ), ;
-            iif( FBGetData( qry, 2 ) == NIL, "", FBGetData( qry, 2 ) ), ;
-            iif( FBGetData( qry, 3 ) == NIL, "", FBGetData( qry, 3 ) ) } )
+   IF HB_ISARRAY(qry)
+      DO WHILE FBFetch(qry) == 0
+         AAdd(aKeys,RTrim(FBGetData(qry,1)))
       ENDDO
+      FBFree(qry)
+   ENDIF
+ENDIF
 
-      FBFree( qry )
+RETURN aKeys
 
-      FOR i := 1 TO Len( aStru )
-        
-        cField  := RTrim( aStru[ i ][ 7 ] )
-         nType   := aStru[ i ][ 2 ]
-         nSize   := aStru[ i ][ 3 ]
-         cTable  := RTrim( aStru[ i ][ 5 ] )
 
-         IF nType == IB_SQL_BLOB
-            nSubType := aStru[ i ][ 4 ]
-            nDec     := 0
-         ELSE
-            nSubType := 0
-            nDec     := aStru[ i ][ 4 ] * -1
-         ENDIF
 
-         nVal := AScan( aDomains, {| x | RTrim( x[ 1 ] ) == cTable .AND. RTrim( x[ 2 ] ) == cField } )
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Method GetServerInfo()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+METHOD GetServerInfo() CLASS Fb5class
 
-         IF nVal != 0
-            cDomain := aDomains[ nVal, 3 ]
-         ELSE
-            cDomain := ""
-         ENDIF
+LOCAL oQuery,cVersion := ""
 
-         SWITCH nType
-         CASE IB_SQL_BOOLEAN
-            cType := "L"; nSize := 1; nDec := 0; EXIT
+oQuery :=::Query("SELECT CAST(rdb$get_context('SYSTEM', 'ENGINE_VERSION') AS CHAR(30)) AS VER FROM rdb$database")
 
-         CASE IB_SQL_TEXT
-         CASE IB_SQL_VARYING
-            cType := "C"; EXIT
+IF oQuery != NIL
+   // Realiza o Fetch no objeto para carregar o buffer e atualizar o status de Eof
+   oQuery:Fetch()
 
-         CASE IB_SQL_SHORT
-            IF "BOOL" $ cDomain
-               cType := "L"; nSize := 1; nDec := 0
-            ELSE
-               cType := "N"; nSize := 5
-            ENDIF
-            EXIT
+   IF !oQuery:Eof()
+      cVersion := oQuery:FieldGet(1)
+   ENDIF
+   oQuery:Destroy()
+ENDIF
 
-         CASE IB_SQL_LONG
-         CASE IB_SQL_INT64
-            cType := "N"; nSize := 9; EXIT
+RETURN AllTrim(cVersion)
 
-         CASE IB_SQL_FLOAT
-         CASE IB_SQL_DOUBLE
-            cType := "N"; nSize := 15; EXIT
 
-         CASE IB_SQL_TIMESTAMP
-            cType := "T"; nSize := 8; EXIT
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Static Function DataToSql()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+STATIC FUNCTION DataToSql(xField,cType)
 
-         CASE IB_SQL_TYPE_DATE
-            cType := "D"; nSize := 8; EXIT
 
-         CASE IB_SQL_TYPE_TIME
-            cType := "H"; nSize := 8; EXIT
+LOCAL nSeconds
+LOCAL nMillis
+LOCAL cTime
 
-         CASE IB_SQL_BLOB
-            IF nSubType == 0
-               cType := "G"
-            ELSE
-               cType := "M"
-            ENDIF
-            nSize := 10; EXIT
+hb_default(@cType,"")
 
-         OTHERWISE
-            cType := "C"; nDec := 0
-         ENDSWITCH
-
-         AAdd( aNew, { cField, cType, nSize, nDec, cTable, cDomain } )
-      NEXT
+SWITCH ValType(xField)
+CASE "C"
+CASE "M"
+   IF cType == "G" .OR. cType == "M"
+      RETURN "X'"+hb_StrToHex(xField)+"'"
+   ELSE
+      RETURN "'"+StrTran(xField,"'","''")+"'"
    ENDIF
 
-   RETURN aNew
+CASE "D"
+   IF Empty(xField)
+      RETURN "NULL"
+   ENDIF
+   RETURN "DATE '"+StrZero(Year(xField),4)+"-"+;
+    StrZero(Month(xField),2)+"-"+;
+    StrZero(Day(xField),2)+"'"
 
-STATIC FUNCTION RemoveSpaces( cQuery )
+CASE "N"
+   RETURN AllTrim(Str(xField))
 
-   DO WHILE At( "  ", cQuery ) != 0
-      cQuery := StrTran( cQuery, "  ", " " )
+CASE "L"
+   RETURN iif(xField,"TRUE","FALSE")
+
+CASE "T"
+CASE "H"
+   IF cType != "H" .AND. Empty(xField)
+      RETURN "NULL"
+   ENDIF
+
+   nSeconds := Int(hb_Sec(xField))
+   nMillis  := Min(999,Int((hb_Sec(xField) - nSeconds) * 1000+0.5))
+   cTime    := StrZero(hb_Hour(xField),2)+":"+;
+       StrZero(hb_Minute(xField),2)+":"+;
+       StrZero(nSeconds,2)+"."+StrZero(nMillis,3)
+
+   IF cType == "H"
+      RETURN "TIME '"+cTime+"'"
+   ENDIF
+   RETURN "TIMESTAMP '"+StrZero(Year(xField),4)+"-"+;
+    StrZero(Month(xField),2)+"-"+;
+    StrZero(Day(xField),2)+" "+cTime+"'"
+ENDSWITCH
+
+RETURN "NULL"
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Static Function ToNumber()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+STATIC FUNCTION ToNumber(xValue)
+
+DO CASE
+CASE ValType(xValue) == "N"
+   RETURN xValue
+CASE ValType(xValue) == "C"
+   RETURN Val(xValue)
+OTHERWISE
+   RETURN 0
+ENDCASE
+RETURN 0
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Static Function StructConvert()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+STATIC FUNCTION StructConvert(aStru,db,dialect)
+
+
+LOCAL aNew     := {}
+LOCAL cField
+LOCAL nType
+LOCAL cType
+LOCAL nSize
+LOCAL nDec
+LOCAL nSubType
+LOCAL cTable
+LOCAL cDomain
+LOCAL i
+LOCAL qry
+LOCAL cQuery
+LOCAL aDomains := {}
+LOCAL nVal
+
+LOCAL xTables := ""
+LOCAL xFields := ""
+
+FOR i := 1 TO Len(aStru)
+   xtables += DataToSql(aStru[i,5])
+   xfields += DataToSql(aStru[i,1])
+
+   IF i != Len(aStru)
+      xtables += ","
+      xfields += ","
+   ENDIF
+NEXT
+
+cQuery := "select rdb$relation_name, rdb$field_name, rdb$field_source "
+cQuery += "  from rdb$relation_fields "
+cQuery += " where rdb$field_name not like 'RDB$%' "
+cQuery += "   and rdb$relation_name in ("+xtables+")"
+cQuery += "   and rdb$field_name in ("+xfields+")"
+
+qry := FBQuery(db,RemoveSpaces(cQuery),dialect)
+
+IF HB_ISARRAY(qry)
+
+   DO WHILE FBFetch(qry) == 0
+      AAdd(aDomains,{;
+       iif(FBGetData(qry,1) == NIL,"",FBGetData(qry,1)),;
+       iif(FBGetData(qry,2) == NIL,"",FBGetData(qry,2)),;
+       iif(FBGetData(qry,3) == NIL,"",FBGetData(qry,3))})
    ENDDO
 
-   RETURN cQuery
-   
+   FBFree(qry)
+
+   FOR i := 1 TO Len(aStru)
+
+      cField := RTrim(aStru[i,7])
+      nType  := aStru[i,2]
+      nSize  := aStru[i,3]
+      cTable := RTrim(aStru[i,5])
+
+      IF nType == IB_SQL_BLOB
+         nSubType := aStru[i,4]
+         nDec     := 0
+      ELSE
+         nSubType := 0
+         nDec     := aStru[i,4] * - 1
+      ENDIF
+
+      nVal := AScan(aDomains,{| x | RTrim(x[1]) == cTable .AND. RTrim(x[2]) == cField})
+
+      IF nVal != 0
+         cDomain := aDomains[nVal,3]
+      ELSE
+         cDomain := ""
+      ENDIF
+
+      SWITCH nType
+      CASE IB_SQL_BOOLEAN
+         cType := "L"
+         nSize := 1
+         nDec  := 0
+         EXIT
+
+      CASE IB_SQL_TEXT
+      CASE IB_SQL_VARYING
+         cType := "C"
+         EXIT
+
+      CASE IB_SQL_SHORT
+         IF "BOOL" $ cDomain
+            cType := "L"
+            nSize := 1
+            nDec  := 0
+         ELSE
+            cType := "N"
+            nSize := 5
+         ENDIF
+         EXIT
+
+      CASE IB_SQL_LONG
+      CASE IB_SQL_INT64
+         cType := "N"
+         nSize := 9
+         EXIT
+
+      CASE IB_SQL_FLOAT
+      CASE IB_SQL_DOUBLE
+         cType := "N"
+         nSize := 15
+         EXIT
+
+      CASE IB_SQL_TIMESTAMP
+         cType := "T"
+         nSize := 8
+         EXIT
+
+      CASE IB_SQL_TYPE_DATE
+         cType := "D"
+         nSize := 8
+         EXIT
+
+      CASE IB_SQL_TYPE_TIME
+         cType := "H"
+         nSize := 8
+         EXIT
+
+      CASE IB_SQL_BLOB
+         IF nSubType == 0
+            cType := "G"
+         ELSE
+            cType := "M"
+         ENDIF
+         nSize := 10
+         EXIT
+
+      OTHERWISE
+         cType := "C"
+         nDec  := 0
+      ENDSWITCH
+
+      AAdd(aNew,{cField,cType,nSize,nDec,cTable,cDomain})
+   NEXT
+ENDIF
+
+RETURN aNew
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Static Function RemoveSpaces()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+STATIC FUNCTION RemoveSpaces(cQuery)
+
+
+DO WHILE At ("  ",cQuery) != 0
+   cQuery := StrTran(cQuery,"  "," ")
+ENDDO
+
+RETURN cQuery
+
 // +--------------------------------------------------------------------
 // +
 // +    Static Function strlogicClasse( cVAL, lDEFAULT )
 // +    Conversor universal de retornos textuais/num�ricos para Booleano
 // +
 // +--------------------------------------------------------------------
-STATIC FUNCTION strlogicClasse( cVAL, lDEFAULT )
+STATIC FUNCTION strlogicClasse(cVAL,lDEFAULT)
 
-   IF ValType( lDEFAULT ) <> "L"
-      lDEFAULT := .F.
-   ENDIF
-   
-   IF ValType( cVAL ) != "C"
-      cVAL := hb_ValToStr( cVAL )
-   ENDIF
-   
-   SWITCH Upper( AllTrim( cVal ) )
-   CASE ".T."
-   CASE "TRUE"
-   CASE "YES"
-   CASE "SIM"
-   CASE "ON"
-   CASE "Y"
-   CASE "1"
-   CASE "T"
-   CASE "S"
-      RETURN .T.
-   CASE ".F."
-   CASE "FALSE"
-   CASE "NO"
-   CASE "NAO"
-   CASE "OFF"
-   CASE "N"
-   CASE "0"
-   CASE "F"
-   CASE "<NULL>"
-   CASE "NULL"
-   CASE "NUL"
-   CASE "NIL"
-      RETURN .F.
-   ENDSWITCH
 
-   RETURN lDEFAULT
-   
-   
-   
-STATIC FUNCTION StrDateclass( xData ) 
+IF ValType(lDEFAULT) <> "L"
+   lDEFAULT := .F.
+ENDIF
 
-LOCAL dRet := CToD( "" )
-   LOCAL cTemp, aParts 
-   LOCAL i, nMes, cMes, cAno, cDia, nDia, nAno, cMesStr
-   LOCAL cCleanData
-   
-   // Matrizes independentes pela clareza e velocidade nativa do AScan
-   LOCAL aMonthsEN := { "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC" }
-   LOCAL aMonthsPT := { "JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ" }
+IF ValType(cVAL) != "C"
+   cVAL := hb_ValToStr(cVAL)
+ENDIF
 
-   IF ValType( xData ) == "D"
-      RETURN xData
-   ENDIF
+SWITCH Upper(AllTrim(cVal))
+CASE ".T."
+CASE "TRUE"
+CASE "YES"
+CASE "SIM"
+CASE "ON"
+CASE "Y"
+CASE "1"
+CASE "T"
+CASE "S"
+   RETURN .T.
+CASE ".F."
+CASE "FALSE"
+CASE "NO"
+CASE "NAO"
+CASE "OFF"
+CASE "N"
+CASE "0"
+CASE "F"
+CASE "<NULL>"
+CASE "NULL"
+CASE "NUL"
+CASE "NIL"
+   RETURN .F.
+ENDSWITCH
 
-   IF ValType( xData ) <> "C" .OR. Empty( xData )
-      RETURN dRet
-   ENDIF
-   
-   // Limpa uma �nica vez para otimizar os testes
-   cCleanData := Upper( AllTrim( xData ) )
+RETURN lDEFAULT
 
-   // Barreira imediata contra literais nulos/vazios
-   IF cCleanData == "NULL" .OR. cCleanData == "NIL" .OR. cCleanData == "<NULL>" .OR. cCleanData == "NUL" .OR. cCleanData == "/  /" .OR. cCleanData == "-  -"
-      RETURN dRet
-   ENDIF
 
-   cTemp := AllTrim( xData )
 
-   // -------------------------------------------------------------------------
-   // Suporte a Formatos HTTP-date e Logs (Ingl�s e Portugu�s)
-   // -------------------------------------------------------------------------
-   cTemp := StrTran( cTemp, ",", " " )
-   cTemp := StrTran( cTemp, "-", " " )
 
-   DO WHILE "  " $ cTemp
-      cTemp := StrTran( cTemp, "  ", " " )
-   ENDDO
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Static Function StrDateclass()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+STATIC FUNCTION StrDateclass(xData)
 
-   aParts := hb_ATokens( AllTrim( cTemp ), " " )
 
-   IF Len( aParts ) >= 4
-      FOR i := 1 TO Len( aParts )
-         cMesStr := Upper( Left( aParts[ i ], 3 ) )
-         
-         // 1. Busca primeiro em Ingl�s
-         nMes := AScan( aMonthsEN, cMesStr )
-         
-         // 2. Se n�o encontrar, tenta em Portugu�s
-         IF nMes == 0
-            nMes := AScan( aMonthsPT, cMesStr )
-         ENDIF
-         
-         // Se encontrou o m�s, processa
-         IF nMes > 0
-            cMes := StrZero( nMes, 2 )
-            
-            // Extrai o Dia e o Ano baseado na posi��o do M�s (ANSI C vs RFC)
-            IF i == 2 .AND. Len( aParts ) >= 5 // ANSI C asctime
-               cDia := StrZero( Val( aParts[ 3 ] ), 2 )
-               cAno := aParts[ 5 ]
-            ELSEIF i == 3 // RFC 1123 / RFC 850
-               cDia := StrZero( Val( aParts[ 2 ] ), 2 )
-               cAno := aParts[ 4 ]
-               
-               IF Len( cAno ) == 2
-                  nAno := Val( cAno )
-                  cAno := iif( nAno < 50, "20" + cAno, "19" + cAno )
-               ENDIF
-            ELSE
-               LOOP 
-            ENDIF
-            
-            nDia := Val( cDia )
-            nAno := Val( cAno )
-            
-            IF nDia >= 1 .AND. nDia <= 31 .AND. nAno >= 1000 .AND. Len( cAno ) == 4
-               dRet := SToD( cAno + cMes + cDia )
-               IF !Empty( dRet )
-                  RETURN dRet
-               ENDIF
-            ENDIF
-         ENDIF
-      NEXT
-   ENDIF
+LOCAL dRet       := CToD("")
+LOCAL cTemp,aParts
+LOCAL i,nMes,cMes,cAno,cDia,nDia,nAno,cMesStr
+LOCAL cCleanData
 
-   // -------------------------------------------------------------------------
-   // Fallback Original para Bancos de Dados (YYYY-MM-DD, DD/MM/YYYY, etc.)
-   // -------------------------------------------------------------------------
-   cTemp := AllTrim( xData ) // Restaura a string original limpa para o fallback
-   cTemp := StrTran( cTemp, "-", "/" ) 
-   cTemp := StrTran( cTemp, ".", "/" ) 
-   aParts := hb_ATokens( cTemp, "/" ) 
+// Matrizes independentes pela clareza e velocidade nativa do AScan
+LOCAL aMonthsEN := {"JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"}
+LOCAL aMonthsPT := {"JAN","FEV","MAR","ABR","MAI","JUN","JUL","AGO","SET","OUT","NOV","DEZ"}
 
-   IF Len( aParts ) == 3
-      IF Len( aParts[ 1 ] ) == 4
-         cAno := aParts[ 1 ]
-         cMes := StrZero( Val( aParts[ 2 ] ), 2 ) 
-         cDia := StrZero( Val( aParts[ 3 ] ), 2 )
-      ELSE
-         cDia := StrZero( Val( aParts[ 1 ] ), 2 ) 
-         cMes := StrZero( Val( aParts[ 2 ] ), 2 )
-         cAno := aParts[ 3 ]
-         IF Len( cAno ) == 2
-            nAno := Val( cAno )
-            cAno := iif( nAno < 50, "20" + cAno, "19" + cAno ) 
-         ENDIF
+IF ValType(xData) == "D"
+   RETURN xData
+ENDIF
+
+IF ValType(xData) <> "C" .OR. Empty(xData)
+   RETURN dRet
+ENDIF
+
+// Limpa uma �nica vez para otimizar os testes
+cCleanData := Upper(AllTrim(xData))
+
+// Barreira imediata contra literais nulos/vazios
+IF cCleanData == "NULL" .OR. cCleanData == "NIL" .OR. cCleanData == "<NULL>" .OR. cCleanData == "NUL" .OR. cCleanData == "/  /" .OR. cCleanData == "-  -"
+   RETURN dRet
+ENDIF
+
+cTemp := AllTrim(xData)
+
+// -------------------------------------------------------------------------
+// Suporte a Formatos HTTP-date e Logs (Ingl�s e Portugu�s)
+// -------------------------------------------------------------------------
+cTemp := StrTran(cTemp,","," ")
+cTemp := StrTran(cTemp,"-"," ")
+
+DO WHILE "  " $ cTemp
+   cTemp := StrTran(cTemp,"  "," ")
+ENDDO
+
+aParts := hb_ATokens(AllTrim(cTemp)," ")
+
+IF Len(aParts) >= 4
+   FOR i := 1 TO Len(aParts)
+      cMesStr := Upper(Left(aParts[i],3))
+
+      // 1. Busca primeiro em Ingl�s
+      nMes := AScan(aMonthsEN,cMesStr)
+
+      // 2. Se n�o encontrar, tenta em Portugu�s
+      IF nMes == 0
+         nMes := AScan(aMonthsPT,cMesStr)
       ENDIF
-      IF cAno + cMes + cDia == "00000000"
-         RETURN CToD( "" )
-      ENDIF 
-      dRet := SToD( cAno + cMes + cDia ) 
-      RETURN iif( Empty( dRet ), CToD( "" ), dRet )
-   ELSE
-      IF Len( cTemp ) == 8
-         IF Val( Left( cTemp, 4 ) ) > 1900
-            dRet := SToD( cTemp ) 
+
+      // Se encontrou o m�s, processa
+      IF nMes > 0
+         cMes := StrZero(nMes,2)
+
+         // Extrai o Dia e o Ano baseado na posi��o do M�s (ANSI C vs RFC)
+         IF i == 2 .AND. Len(aParts) >= 5   // ANSI C asctime
+            cDia := StrZero(Val(aParts[3]),2)
+            cAno := aParts[5]
+         ELSEIF i == 3  // RFC 1123 / RFC 850
+            cDia := StrZero(Val(aParts[2]),2)
+            cAno := aParts[4]
+
+            IF Len(cAno) == 2
+               nAno := Val(cAno)
+               cAno := iif(nAno < 50,"20"+cAno,"19"+cAno)
+            ENDIF
          ELSE
-            dRet := SToD( Right( cTemp, 4 ) + SubStr( cTemp, 3, 2 ) + Left( cTemp, 2 ) ) 
+            LOOP
          ENDIF
-      ELSEIF Len( cTemp ) == 6
-         nAno := Val( Right( cTemp, 2 ) )
-         cAno := iif( nAno < 50, "20" + Right( cTemp, 2 ), "19" + Right( cTemp, 2 ) ) 
-         dRet := SToD( cAno + SubStr( cTemp, 3, 2 ) + Left( cTemp, 2 ) ) 
-      ELSE
-         dRet := CToD( xData ) 
+
+         nDia := Val(cDia)
+         nAno := Val(cAno)
+
+         IF nDia >= 1 .AND. nDia <= 31 .AND. nAno >= 1000 .AND. Len(cAno) == 4
+            dRet := SToD(cAno+cMes+cDia)
+            IF !Empty(dRet)
+               RETURN dRet
+            ENDIF
+         ENDIF
+      ENDIF
+   NEXT
+ENDIF
+
+// -------------------------------------------------------------------------
+// Fallback Original para Bancos de Dados (YYYY-MM-DD, DD/MM/YYYY, etc.)
+// -------------------------------------------------------------------------
+cTemp  := AllTrim(xData)  // Restaura a string original limpa para o fallback
+cTemp  := StrTran(cTemp,"-","/")
+cTemp  := StrTran(cTemp,".","/")
+aParts := hb_ATokens(cTemp,"/")
+
+IF Len(aParts) == 3
+   IF Len(aParts[1]) == 4
+      cAno := aParts[1]
+      cMes := StrZero(Val(aParts[2]),2)
+      cDia := StrZero(Val(aParts[3]),2)
+   ELSE
+      cDia := StrZero(Val(aParts[1]),2)
+      cMes := StrZero(Val(aParts[2]),2)
+      cAno := aParts[3]
+      IF Len(cAno) == 2
+         nAno := Val(cAno)
+         cAno := iif(nAno < 50,"20"+cAno,"19"+cAno)
       ENDIF
    ENDIF
+   IF cAno+cMes+cDia == "00000000"
+      RETURN CToD("")
+   ENDIF
+   dRet := SToD(cAno+cMes+cDia)
+   RETURN iif(Empty(dRet),CToD(""),dRet)
+ELSE
+   IF Len(cTemp) == 8
+      IF Val(Left(cTemp,4)) > 1900
+         dRet := SToD(cTemp)
+      ELSE
+         dRet := SToD(Right(cTemp,4)+SubStr(cTemp,3,2)+Left(cTemp,2))
+      ENDIF
+   ELSEIF Len(cTemp) == 6
+      nAno := Val(Right(cTemp,2))
+      cAno := iif(nAno < 50,"20"+Right(cTemp,2),"19"+Right(cTemp,2))
+      dRet := SToD(cAno+SubStr(cTemp,3,2)+Left(cTemp,2))
+   ELSE
+      dRet := CToD(xData)
+   ENDIF
+ENDIF
 RETURN dRet
 
 // +--------------------------------------------------------------------
 // +    Fun��es de Apoio para Leitura e Grava��o Sob Demanda (Fb5Class)
 // +--------------------------------------------------------------------
 
-FUNCTION FBClass_PegarMemo( oObj, cCampo )
-   LOCAL cTxt, lAnt := t_lLoadMemos
-   FBClass_SetLoadMemos( .T. )
-   cTxt := oObj:FieldGet( oObj:FieldPos( cCampo ) )
-   FBClass_SetLoadMemos( lAnt )
-   RETURN iif( Empty( cTxt ) .OR. cTxt == "<MEMO>", "", cTxt )
 
-FUNCTION FBClass_GravarMemo( oRow, cCampo, cTxt )
-   LOCAL lAnt := t_lLoadMemos
-   IF ValType( cTxt ) != "C"; RETURN .F.; ENDIF
-   
-   FBClass_SetLoadMemos( .T. )
-   oRow:FieldPut( oRow:FieldPos( cCampo ), cTxt )
-   FBClass_SetLoadMemos( lAnt )
-   RETURN .T. 
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Function FBClass_PegarMemo()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+FUNCTION FBClass_PegarMemo(oObj,cCampo)
 
-FUNCTION FBClass_PegarBlobJpg( oObj, cCampo, cDir )
-   LOCAL cBin, lAnt := t_lLoadBlobs
-   FBClass_SetLoadBlobs( .T. )
-   cBin := oObj:FieldGet( oObj:FieldPos( cCampo ) )
-   FBClass_SetLoadBlobs( lAnt )
-   
-   IF Empty( cBin ) .OR. cBin == "<IMAGEM/BLOB>"
-      RETURN .F.
-   ENDIF
-   RETURN hb_memowrit( cDir, cBin )
-   
-FUNCTION FBClass_GravarBlobJpg( oRow, cCampo, cDir )
-   LOCAL cBin, lAnt := t_lLoadBlobs
-   IF !hb_FileExists( cDir ); RETURN .F.; ENDIF
-   
-   cBin := hb_memoread( cDir )
-   
-   FBClass_SetLoadBlobs( .T. )
-   oRow:FieldPut( oRow:FieldPos( cCampo ), cBin )
-   FBClass_SetLoadBlobs( lAnt )
-   RETURN .T.
-   
-   
-    // +--------------------------------------------------------------------
+LOCAL cTxt,lAnt := t_lLoadMemos
+FBClass_SetLoadMemos(.T.)
+cTxt := oObj:FieldGet(oObj:FieldPos(cCampo))
+FBClass_SetLoadMemos(lAnt)
+RETURN iif(Empty(cTxt) .OR. cTxt == "<MEMO>","",cTxt)
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Function FBClass_GravarMemo()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+FUNCTION FBClass_GravarMemo(oRow,cCampo,cTxt)
+
+LOCAL lAnt := t_lLoadMemos
+IF ValType(cTxt) != "C" 
+   RETURN .F. 
+ENDIF
+
+FBClass_SetLoadMemos(.T.)
+oRow:FieldPut(oRow:FieldPos(cCampo),cTxt)
+FBClass_SetLoadMemos(lAnt)
+RETURN .T.
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Function FBClass_PegarBlobJpg()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+FUNCTION FBClass_PegarBlobJpg(oObj,cCampo,cDir)
+
+LOCAL cBin,lAnt := t_lLoadBlobs
+FBClass_SetLoadBlobs(.T.)
+cBin := oObj:FieldGet(oObj:FieldPos(cCampo))
+FBClass_SetLoadBlobs(lAnt)
+
+IF Empty(cBin) .OR. cBin == "<IMAGEM/BLOB>"
+   RETURN .F.
+ENDIF
+RETURN hb_memowrit(cDir,cBin)
+
+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Function FBClass_GravarBlobJpg()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+FUNCTION FBClass_GravarBlobJpg(oRow,cCampo,cDir)
+
+LOCAL cBin,lAnt := t_lLoadBlobs
+IF !hb_FileExists(cDir) 
+   RETURN .F. 
+ENDIF
+
+cBin := hb_memoread(cDir)
+
+FBClass_SetLoadBlobs(.T.)
+oRow:FieldPut(oRow:FieldPos(cCampo),cBin)
+FBClass_SetLoadBlobs(lAnt)
+RETURN .T.
+
+
+// +--------------------------------------------------------------------
 // +  Fun��o: UniversalDateTime
 // +  Objetivo: Tratar datas complexas mantendo e corrigindo o hor�rio
 // +  Retorna: Timestamp nativo (T) de alta precis�o
 // +--------------------------------------------------------------------
-STATIC FUNCTION UniversalDateTime( xData )
 
-   LOCAL cStr, cDataLimpa, aParts, i, dData
-   LOCAL cTime := "00:00:00"
-   LOCAL nHour := 0, nMin := 0, nSec := 0
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+*+    Static Function UniversalDateTime()
+*+
+*+
+*+
+*+--------------------------------------------------------------------
+*+
+*+
+*+
+STATIC FUNCTION UniversalDateTime(xData)
 
-   // 1. J� � Data ou Timestamp? Trata a convers�o direta
-   IF ValType( xData ) == "T"
-      RETURN xData
-   ELSEIF ValType( xData ) == "D"
-      RETURN hb_DateTime( Year(xData), Month(xData), Day(xData) )
+
+LOCAL cStr,cDataLimpa,aParts,i,dData
+LOCAL cTime := "00:00:00"
+LOCAL nHour := 0,nMin := 0,nSec := 0
+
+// 1. J� � Data ou Timestamp? Trata a convers�o direta
+IF ValType(xData) == "T"
+   RETURN xData
+ELSEIF ValType(xData) == "D"
+   RETURN hb_DateTime(Year(xData),Month(xData),Day(xData))
+ENDIF
+
+// 2. Barreira para nulos ou vari�veis n�o suportadas
+IF ValType(xData) <> "C" .OR. Empty(xData)
+   RETURN hb_DateTime(0,0,0)
+ENDIF
+
+// 3. Limpa espa�os e conserta erros como ";" ou tags ISO "T"
+cStr := AllTrim(xData)
+cStr := StrTran(cStr,";",":")
+cStr := StrTran(cStr,"T"," ")
+
+aParts     := hb_ATokens(cStr," ")
+cDataLimpa := ""
+
+// 4. Ca�ador de Hor�rios
+FOR i := 1 TO Len(aParts)
+   IF ":" $ aParts[i] .AND. Val(StrTran(aParts[i],":","")) >= 0
+      cTime := aParts[i]  // Isola apenas a hora encontrada
+   ELSE
+      cDataLimpa += aParts[i]+" "   // Reconstr�i string base s� da data
    ENDIF
+NEXT
 
-   // 2. Barreira para nulos ou vari�veis n�o suportadas
-   IF ValType( xData ) <> "C" .OR. Empty( xData )
-      RETURN hb_DateTime( 0, 0, 0 )
-   ENDIF
+cDataLimpa := AllTrim(cDataLimpa)
 
-   // 3. Limpa espa�os e conserta erros como ";" ou tags ISO "T"
-   cStr := AllTrim( xData )
-   cStr := StrTran( cStr, ";", ":" )
-   cStr := StrTran( cStr, "T", " " )
+// 5. Utiliza o motor otimizado para extrair o calend�rio v�lido
+dData := StrDateclass(cDataLimpa)
 
-   aParts := hb_ATokens( cStr, " " )
-   cDataLimpa := ""
+// Fallback se a rotina retornar vazio, checa direto via Harbour CToD
+IF Empty(dData) .AND. !Empty(CToD(cDataLimpa))
+   dData := CToD(cDataLimpa)
+ENDIF
 
-   // 4. Ca�ador de Hor�rios
-   FOR i := 1 TO Len( aParts )
-      IF ":" $ aParts[i] .AND. Val( StrTran( aParts[i], ":", "" ) ) >= 0
-         cTime := aParts[i] // Isola apenas a hora encontrada
-      ELSE
-         cDataLimpa += aParts[i] + " " // Reconstr�i string base s� da data
-      ENDIF
-   NEXT
+IF Empty(dData)
+   RETURN hb_DateTime(0,0,0)
+ENDIF
 
-   cDataLimpa := AllTrim( cDataLimpa )
-   
-   // 5. Utiliza o motor otimizado para extrair o calend�rio v�lido
-   dData := StrDateclass( cDataLimpa )
+// 6. Separa e converte as partes do Hor�rio
+aParts := hb_ATokens(cTime,":")
+IF Len(aParts) >= 1 
+   nHour := Val(aParts[1])
+ENDIF
+IF Len(aParts) >= 2 
+   nMin := Val(aParts[2])
+ENDIF
+IF Len(aParts) >= 3 
+   nSec := Val(aParts[3])
+ENDIF
 
-   // Fallback se a rotina retornar vazio, checa direto via Harbour CToD
-   IF Empty( dData ) .AND. !Empty( CToD( cDataLimpa ) )
-      dData := CToD( cDataLimpa )
-   ENDIF
+// 7. Retorna o Objeto Timestamp Oficial
+RETURN hb_DateTime(Year(dData),Month(dData),Day(dData),nHour,nMin,nSec)
 
-   IF Empty( dData )
-      RETURN hb_DateTime( 0, 0, 0 )
-   ENDIF
 
-   // 6. Separa e converte as partes do Hor�rio
-   aParts := hb_ATokens( cTime, ":" )
-   IF Len( aParts ) >= 1; nHour := Val( aParts[1] ); ENDIF
-   IF Len( aParts ) >= 2; nMin  := Val( aParts[2] ); ENDIF
-   IF Len( aParts ) >= 3; nSec  := Val( aParts[3] ); ENDIF
-
-   // 7. Retorna o Objeto Timestamp Oficial
-   RETURN hb_DateTime( Year( dData ), Month( dData ), Day( dData ), nHour, nMin, nSec ) 
-   
+*+ EOF: Fb5class.prg
+*+
